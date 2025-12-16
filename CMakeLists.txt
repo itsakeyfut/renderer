@@ -9,6 +9,19 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # =============================================================================
+# Dependencies via FetchContent
+# =============================================================================
+include(FetchContent)
+
+# spdlog - Fast C++ logging library
+FetchContent_Declare(
+    spdlog
+    GIT_REPOSITORY https://github.com/gabime/spdlog.git
+    GIT_TAG        v1.15.0
+)
+FetchContent_MakeAvailable(spdlog)
+
+# =============================================================================
 # Build Options
 # =============================================================================
 option(BUILD_TESTS "Build test executables" ON)
@@ -40,9 +53,20 @@ endif()
 # Source Files
 # =============================================================================
 
-# Core library (header-only for now)
-add_library(Core INTERFACE)
-target_include_directories(Core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+# Core library
+set(CORE_SOURCES
+    src/Core/Log.cpp
+)
+
+set(CORE_HEADERS
+    src/Core/Assert.h
+    src/Core/Log.h
+    src/Core/Types.h
+)
+
+add_library(Core STATIC ${CORE_SOURCES} ${CORE_HEADERS})
+target_include_directories(Core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(Core PUBLIC spdlog::spdlog)
 
 # =============================================================================
 # Tests
@@ -53,8 +77,12 @@ if(BUILD_TESTS)
     # Assert test
     add_executable(TestAssert tests/TestAssert.cpp)
     target_link_libraries(TestAssert PRIVATE Core)
-
     add_test(NAME TestAssert COMMAND TestAssert)
+
+    # Log test
+    add_executable(TestLog tests/TestLog.cpp)
+    target_link_libraries(TestLog PRIVATE Core)
+    add_test(NAME TestLog COMMAND TestLog)
 endif()
 
 # =============================================================================
