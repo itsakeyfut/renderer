@@ -1,1 +1,4 @@
 specs/**
+
+.claude/commands/*.md
+.claude/settings.local.json
