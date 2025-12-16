@@ -17,9 +17,19 @@ include(FetchContent)
 FetchContent_Declare(
     spdlog
     GIT_REPOSITORY https://github.com/gabime/spdlog.git
-    GIT_TAG        v1.15.0
+    GIT_TAG        v1.16.0
 )
 FetchContent_MakeAvailable(spdlog)
+
+# GoogleTest - C++ Testing Framework
+FetchContent_Declare(
+    googletest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG        v1.17.0
+)
+# For Windows: Prevent overriding the parent project's compiler/linker settings
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
 
 # =============================================================================
 # Build Options
@@ -73,16 +83,17 @@ target_link_libraries(Core PUBLIC spdlog::spdlog)
 # =============================================================================
 if(BUILD_TESTS)
     enable_testing()
+    include(GoogleTest)
 
     # Assert test
     add_executable(TestAssert tests/TestAssert.cpp)
-    target_link_libraries(TestAssert PRIVATE Core)
-    add_test(NAME TestAssert COMMAND TestAssert)
+    target_link_libraries(TestAssert PRIVATE Core GTest::gtest_main)
+    gtest_discover_tests(TestAssert)
 
     # Log test
     add_executable(TestLog tests/TestLog.cpp)
-    target_link_libraries(TestLog PRIVATE Core)
-    add_test(NAME TestLog COMMAND TestLog)
+    target_link_libraries(TestLog PRIVATE Core GTest::gtest_main)
+    gtest_discover_tests(TestLog)
 endif()
 
 # =============================================================================
