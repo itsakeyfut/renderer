@@ -66,11 +66,13 @@ endif()
 # Core library
 set(CORE_SOURCES
     src/Core/Log.cpp
+    src/Core/Timer.cpp
 )
 
 set(CORE_HEADERS
     src/Core/Assert.h
     src/Core/Log.h
+    src/Core/Timer.h
     src/Core/Types.h
 )
 
@@ -94,6 +96,11 @@ if(BUILD_TESTS)
     add_executable(TestLog tests/TestLog.cpp)
     target_link_libraries(TestLog PRIVATE Core GTest::gtest_main)
     gtest_discover_tests(TestLog)
+
+    # Timer test
+    add_executable(TestTimer tests/TestTimer.cpp)
+    target_link_libraries(TestTimer PRIVATE Core GTest::gtest_main)
+    gtest_discover_tests(TestTimer)
 endif()
 
 # =============================================================================
