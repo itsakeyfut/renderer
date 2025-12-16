@@ -2,3 +2,7 @@ specs/**
 
 .claude/commands/*.md
 .claude/settings.local.json
+
+# build artifacts
+build/
+build-release/
