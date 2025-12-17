@@ -177,18 +177,20 @@ target_link_libraries(Platform PUBLIC Core glfw ${VULKAN_TARGET})
 
 # RHI library
 set(RHI_SOURCES
+    src/RHI/RHIDevice.cpp
     src/RHI/RHIInstance.cpp
     src/RHI/RHIPhysicalDevice.cpp
 )
 
 set(RHI_HEADERS
+    src/RHI/RHIDevice.h
     src/RHI/RHIInstance.h
     src/RHI/RHIPhysicalDevice.h
 )
 
 add_library(RHI STATIC ${RHI_SOURCES} ${RHI_HEADERS})
 target_include_directories(RHI PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(RHI PUBLIC Core Platform ${VULKAN_TARGET})
+target_link_libraries(RHI PUBLIC Core Platform ${VULKAN_TARGET} GPUOpen::VulkanMemoryAllocator)
 
 # =============================================================================
 # Main Application
@@ -242,6 +244,11 @@ if(BUILD_TESTS)
     add_executable(TestRHIPhysicalDevice tests/TestRHIPhysicalDevice.cpp)
     target_link_libraries(TestRHIPhysicalDevice PRIVATE RHI Platform Core GTest::gtest_main)
     gtest_discover_tests(TestRHIPhysicalDevice)
+
+    # RHI Device test
+    add_executable(TestRHIDevice tests/TestRHIDevice.cpp)
+    target_link_libraries(TestRHIDevice PRIVATE RHI Platform Core GTest::gtest_main)
+    gtest_discover_tests(TestRHIDevice)
 endif()
 
 # =============================================================================
