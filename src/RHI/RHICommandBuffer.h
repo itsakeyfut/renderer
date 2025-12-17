@@ -9,6 +9,7 @@
 #pragma once
 
 #include "Core/Types.h"
+#include "RHI/RHICommandPool.h"
 
 #include <vulkan/vulkan.h>
 #include <vector>
@@ -17,7 +18,6 @@ namespace RHI
 {
     // Forward declarations
     class RHIDevice;
-    class RHICommandPool;
 
     /**
      * @brief Vulkan Command Buffer wrapper class
@@ -31,7 +31,8 @@ namespace RHI
      *
      * Usage:
      * @code
-     * auto cmdBuffer = RHICommandBuffer::Create(device, pool->GetHandle());
+     * auto pool = RHICommandPool::Create(device);
+     * auto cmdBuffer = RHICommandBuffer::Create(device, pool);
      * cmdBuffer->Begin();
      * cmdBuffer->BeginRenderPass(renderPassInfo);
      * cmdBuffer->BindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
@@ -46,13 +47,17 @@ namespace RHI
         /**
          * @brief Factory method to create a Command Buffer
          * @param device The logical device
-         * @param pool The command pool to allocate from
+         * @param pool The command pool to allocate from (must outlive the command buffer)
          * @param level Command buffer level (primary or secondary)
          * @return Shared pointer to the created command buffer, or nullptr on failure
+         *
+         * @note The command buffer holds a reference to the pool to ensure the pool
+         *       outlives the buffer. This prevents use-after-free if the pool is
+         *       destroyed before the buffer.
          */
         static Core::Ref<RHICommandBuffer> Create(
             const Core::Ref<RHIDevice>& device,
-            VkCommandPool pool,
+            const Core::Ref<RHICommandPool>& pool,
             VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
         /**
@@ -532,11 +537,12 @@ namespace RHI
          */
         bool Initialize(
             const Core::Ref<RHIDevice>& device,
-            VkCommandPool pool,
+            const Core::Ref<RHICommandPool>& pool,
             VkCommandBufferLevel level);
 
         VkDevice m_Device = VK_NULL_HANDLE;
-        VkCommandPool m_CommandPool = VK_NULL_HANDLE;
+        Core::Ref<RHICommandPool> m_Pool;  ///< Shared reference to keep pool alive
+        VkCommandPool m_CommandPool = VK_NULL_HANDLE;  ///< Cached handle for performance
         VkCommandBuffer m_CommandBuffer = VK_NULL_HANDLE;
         VkCommandBufferLevel m_Level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         bool m_IsRecording = false;

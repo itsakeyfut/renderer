@@ -180,7 +180,7 @@ TEST_F(RHICommandBufferTest, CreatesCommandBuffer) {
     m_CommandPool = RHI::RHICommandPool::Create(m_Device);
     ASSERT_NE(m_CommandPool, nullptr);
 
-    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool->GetHandle());
+    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
 
     ASSERT_NE(m_CommandBuffer, nullptr);
     EXPECT_NE(m_CommandBuffer->GetHandle(), VK_NULL_HANDLE);
@@ -196,7 +196,7 @@ TEST_F(RHICommandBufferTest, CreatesPrimaryCommandBuffer) {
 
     m_CommandBuffer = RHI::RHICommandBuffer::Create(
         m_Device,
-        m_CommandPool->GetHandle(),
+        m_CommandPool,
         VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
     ASSERT_NE(m_CommandBuffer, nullptr);
@@ -211,7 +211,7 @@ TEST_F(RHICommandBufferTest, CreatesSecondaryCommandBuffer) {
 
     m_CommandBuffer = RHI::RHICommandBuffer::Create(
         m_Device,
-        m_CommandPool->GetHandle(),
+        m_CommandPool,
         VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 
     ASSERT_NE(m_CommandBuffer, nullptr);
@@ -228,7 +228,7 @@ TEST_F(RHICommandBufferTest, BeginRecordingWorks) {
     m_CommandPool = RHI::RHICommandPool::Create(m_Device);
     ASSERT_NE(m_CommandPool, nullptr);
 
-    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool->GetHandle());
+    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
     ASSERT_NE(m_CommandBuffer, nullptr);
 
     EXPECT_FALSE(m_CommandBuffer->IsRecording());
@@ -248,7 +248,7 @@ TEST_F(RHICommandBufferTest, BeginWithOneTimeSubmitFlag) {
     m_CommandPool = RHI::RHICommandPool::Create(m_Device);
     ASSERT_NE(m_CommandPool, nullptr);
 
-    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool->GetHandle());
+    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
     ASSERT_NE(m_CommandBuffer, nullptr);
 
     m_CommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
@@ -264,7 +264,7 @@ TEST_F(RHICommandBufferTest, ResetCommandBuffer) {
     m_CommandPool = RHI::RHICommandPool::Create(m_Device);
     ASSERT_NE(m_CommandPool, nullptr);
 
-    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool->GetHandle());
+    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
     ASSERT_NE(m_CommandBuffer, nullptr);
 
     // Record something
@@ -287,7 +287,7 @@ TEST_F(RHICommandBufferTest, ResetWithResourceRelease) {
     m_CommandPool = RHI::RHICommandPool::Create(m_Device);
     ASSERT_NE(m_CommandPool, nullptr);
 
-    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool->GetHandle());
+    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
     ASSERT_NE(m_CommandBuffer, nullptr);
 
     m_CommandBuffer->Begin();
@@ -307,7 +307,7 @@ TEST_F(RHICommandBufferTest, SetViewportWorks) {
     m_CommandPool = RHI::RHICommandPool::Create(m_Device);
     ASSERT_NE(m_CommandPool, nullptr);
 
-    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool->GetHandle());
+    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
     ASSERT_NE(m_CommandBuffer, nullptr);
 
     m_CommandBuffer->Begin();
@@ -331,7 +331,7 @@ TEST_F(RHICommandBufferTest, SetScissorWorks) {
     m_CommandPool = RHI::RHICommandPool::Create(m_Device);
     ASSERT_NE(m_CommandPool, nullptr);
 
-    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool->GetHandle());
+    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
     ASSERT_NE(m_CommandBuffer, nullptr);
 
     m_CommandBuffer->Begin();
@@ -351,7 +351,7 @@ TEST_F(RHICommandBufferTest, SetLineWidthWorks) {
     m_CommandPool = RHI::RHICommandPool::Create(m_Device);
     ASSERT_NE(m_CommandPool, nullptr);
 
-    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool->GetHandle());
+    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
     ASSERT_NE(m_CommandBuffer, nullptr);
 
     m_CommandBuffer->Begin();
@@ -367,7 +367,7 @@ TEST_F(RHICommandBufferTest, SetDepthBiasWorks) {
     m_CommandPool = RHI::RHICommandPool::Create(m_Device);
     ASSERT_NE(m_CommandPool, nullptr);
 
-    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool->GetHandle());
+    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
     ASSERT_NE(m_CommandBuffer, nullptr);
 
     m_CommandBuffer->Begin();
@@ -383,7 +383,7 @@ TEST_F(RHICommandBufferTest, SetBlendConstantsWorks) {
     m_CommandPool = RHI::RHICommandPool::Create(m_Device);
     ASSERT_NE(m_CommandPool, nullptr);
 
-    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool->GetHandle());
+    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
     ASSERT_NE(m_CommandBuffer, nullptr);
 
     m_CommandBuffer->Begin();
@@ -404,9 +404,9 @@ TEST_F(RHICommandBufferTest, MultipleCommandBuffersFromSamePool) {
     m_CommandPool = RHI::RHICommandPool::Create(m_Device);
     ASSERT_NE(m_CommandPool, nullptr);
 
-    auto cmdBuffer1 = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool->GetHandle());
-    auto cmdBuffer2 = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool->GetHandle());
-    auto cmdBuffer3 = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool->GetHandle());
+    auto cmdBuffer1 = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
+    auto cmdBuffer2 = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
+    auto cmdBuffer3 = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
 
     ASSERT_NE(cmdBuffer1, nullptr);
     ASSERT_NE(cmdBuffer2, nullptr);
@@ -436,8 +436,8 @@ TEST_F(RHICommandBufferTest, MultipleCommandPools) {
 
     EXPECT_NE(pool1->GetHandle(), pool2->GetHandle());
 
-    auto cmdBuffer1 = RHI::RHICommandBuffer::Create(m_Device, pool1->GetHandle());
-    auto cmdBuffer2 = RHI::RHICommandBuffer::Create(m_Device, pool2->GetHandle());
+    auto cmdBuffer1 = RHI::RHICommandBuffer::Create(m_Device, pool1);
+    auto cmdBuffer2 = RHI::RHICommandBuffer::Create(m_Device, pool2);
 
     ASSERT_NE(cmdBuffer1, nullptr);
     ASSERT_NE(cmdBuffer2, nullptr);
@@ -469,7 +469,7 @@ TEST_F(RHICommandBufferTest, CreatesCommandBufferOnComputeQueue) {
     m_CommandPool = RHI::RHICommandPool::Create(m_Device, config);
     ASSERT_NE(m_CommandPool, nullptr);
 
-    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool->GetHandle());
+    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
     ASSERT_NE(m_CommandBuffer, nullptr);
 
     // Test basic recording works
@@ -489,7 +489,7 @@ TEST_F(RHICommandBufferTest, PipelineBarrierWorks) {
     m_CommandPool = RHI::RHICommandPool::Create(m_Device);
     ASSERT_NE(m_CommandPool, nullptr);
 
-    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool->GetHandle());
+    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
     ASSERT_NE(m_CommandBuffer, nullptr);
 
     m_CommandBuffer->Begin();
@@ -516,7 +516,7 @@ TEST_F(RHICommandBufferTest, PipelineBarrierWithEmptyBarriers) {
     m_CommandPool = RHI::RHICommandPool::Create(m_Device);
     ASSERT_NE(m_CommandPool, nullptr);
 
-    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool->GetHandle());
+    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
     ASSERT_NE(m_CommandBuffer, nullptr);
 
     m_CommandBuffer->Begin();
@@ -539,7 +539,7 @@ TEST_F(RHICommandBufferTest, CommandBufferDestroyedBeforePool) {
     m_CommandPool = RHI::RHICommandPool::Create(m_Device);
     ASSERT_NE(m_CommandPool, nullptr);
 
-    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool->GetHandle());
+    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
     ASSERT_NE(m_CommandBuffer, nullptr);
 
     // Destroy command buffer first
@@ -549,7 +549,7 @@ TEST_F(RHICommandBufferTest, CommandBufferDestroyedBeforePool) {
     EXPECT_NE(m_CommandPool->GetHandle(), VK_NULL_HANDLE);
 
     // Should be able to create new command buffer from pool
-    auto newBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool->GetHandle());
+    auto newBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
     EXPECT_NE(newBuffer, nullptr);
 }
 
@@ -559,8 +559,8 @@ TEST_F(RHICommandBufferTest, CommandPoolDestroyedWithCommandBuffers) {
     auto pool = RHI::RHICommandPool::Create(m_Device);
     ASSERT_NE(pool, nullptr);
 
-    auto cmdBuffer1 = RHI::RHICommandBuffer::Create(m_Device, pool->GetHandle());
-    auto cmdBuffer2 = RHI::RHICommandBuffer::Create(m_Device, pool->GetHandle());
+    auto cmdBuffer1 = RHI::RHICommandBuffer::Create(m_Device, pool);
+    auto cmdBuffer2 = RHI::RHICommandBuffer::Create(m_Device, pool);
 
     ASSERT_NE(cmdBuffer1, nullptr);
     ASSERT_NE(cmdBuffer2, nullptr);

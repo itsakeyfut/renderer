@@ -148,9 +148,16 @@ namespace RHI
             }
         }
 
+        // Enable Vulkan 1.3 dynamic rendering feature
+        // Required for vkCmdBeginRendering/vkCmdEndRendering
+        VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures{};
+        dynamicRenderingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
+        dynamicRenderingFeatures.dynamicRendering = VK_TRUE;
+
         // Create device create info
         VkDeviceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        createInfo.pNext = &dynamicRenderingFeatures;
         createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
         createInfo.pEnabledFeatures = &deviceFeatures;
@@ -177,6 +184,7 @@ namespace RHI
         }
 
         LOG_INFO("Vulkan logical device created successfully");
+        LOG_INFO("Dynamic rendering (Vulkan 1.3) enabled");
 
         // Retrieve queues
         vkGetDeviceQueue(m_Device, m_QueueFamilies.GraphicsFamily.value(), 0, &m_GraphicsQueue);

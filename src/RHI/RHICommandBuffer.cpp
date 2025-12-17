@@ -12,7 +12,7 @@ namespace RHI
 {
     Core::Ref<RHICommandBuffer> RHICommandBuffer::Create(
         const Core::Ref<RHIDevice>& device,
-        VkCommandPool pool,
+        const Core::Ref<RHICommandPool>& pool,
         VkCommandBufferLevel level)
     {
         auto buffer = Core::Ref<RHICommandBuffer>(new RHICommandBuffer());
@@ -28,8 +28,9 @@ namespace RHI
 
     RHICommandBuffer::~RHICommandBuffer()
     {
+        // m_Pool reference ensures the pool is still valid when we free the buffer
         if (m_CommandBuffer != VK_NULL_HANDLE &&
-            m_CommandPool != VK_NULL_HANDLE &&
+            m_Pool != nullptr &&
             m_Device != VK_NULL_HANDLE)
         {
             vkFreeCommandBuffers(m_Device, m_CommandPool, 1, &m_CommandBuffer);
@@ -40,19 +41,20 @@ namespace RHI
 
     bool RHICommandBuffer::Initialize(
         const Core::Ref<RHIDevice>& device,
-        VkCommandPool pool,
+        const Core::Ref<RHICommandPool>& pool,
         VkCommandBufferLevel level)
     {
         ASSERT(device != nullptr);
-        ASSERT(pool != VK_NULL_HANDLE);
+        ASSERT(pool != nullptr);
 
         m_Device = device->GetHandle();
-        m_CommandPool = pool;
+        m_Pool = pool;  // Keep reference to ensure pool outlives buffer
+        m_CommandPool = pool->GetHandle();
         m_Level = level;
 
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocInfo.commandPool = pool;
+        allocInfo.commandPool = m_CommandPool;
         allocInfo.level = level;
         allocInfo.commandBufferCount = 1;
 
