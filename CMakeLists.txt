@@ -162,10 +162,12 @@ target_link_libraries(Core PUBLIC spdlog::spdlog nlohmann_json::nlohmann_json)
 
 # Platform library
 set(PLATFORM_SOURCES
+    src/Platform/Input.cpp
     src/Platform/Window.cpp
 )
 
 set(PLATFORM_HEADERS
+    src/Platform/Input.h
     src/Platform/Window.h
 )
 
@@ -210,6 +212,11 @@ if(BUILD_TESTS)
     add_executable(TestWindow tests/TestWindow.cpp)
     target_link_libraries(TestWindow PRIVATE Platform Core GTest::gtest_main)
     gtest_discover_tests(TestWindow)
+
+    # Input test
+    add_executable(TestInput tests/TestInput.cpp)
+    target_link_libraries(TestInput PRIVATE Platform Core GTest::gtest_main)
+    gtest_discover_tests(TestInput)
 endif()
 
 # =============================================================================

@@ -1,4 +1,5 @@
 #include "Core/Log.h"
+#include "Platform/Input.h"
 #include "Platform/Window.h"
 
 #include <cstdlib>
@@ -20,6 +21,9 @@ int main()
     // Create the window
     Platform::Window window(windowConfig);
 
+    // Initialize input system
+    Platform::Input::Init(window);
+
     // Set resize callback
     window.SetResizeCallback([](uint32_t width, uint32_t height) {
         LOG_INFO("Window resized to: {0}x{1}", width, height);
@@ -35,11 +39,13 @@ int main()
     }
 
     LOG_INFO("Entering main loop...");
+    LOG_INFO("Press WASD to test input, ESC to exit, Right-click to toggle cursor lock");
 
     // Main loop
     while (!window.ShouldClose())
     {
         window.PollEvents();
+        Platform::Input::Update();
 
         // Handle window minimization
         uint32_t fbWidth = 0;
@@ -60,10 +66,68 @@ int main()
             // Future: Recreate swapchain here
         }
 
+        // Demo: Log key presses (only when pressed this frame)
+        if (Platform::Input::IsKeyPressed(Platform::KeyCode::W))
+        {
+            LOG_INFO("W key pressed - Move forward");
+        }
+        if (Platform::Input::IsKeyPressed(Platform::KeyCode::A))
+        {
+            LOG_INFO("A key pressed - Move left");
+        }
+        if (Platform::Input::IsKeyPressed(Platform::KeyCode::S))
+        {
+            LOG_INFO("S key pressed - Move backward");
+        }
+        if (Platform::Input::IsKeyPressed(Platform::KeyCode::D))
+        {
+            LOG_INFO("D key pressed - Move right");
+        }
+        if (Platform::Input::IsKeyPressed(Platform::KeyCode::Space))
+        {
+            LOG_INFO("Space key pressed - Jump");
+        }
+
+        // Demo: Toggle cursor mode with right mouse button
+        if (Platform::Input::IsMouseButtonPressed(Platform::MouseButton::Right))
+        {
+            if (Platform::Input::GetCursorMode() == Platform::CursorMode::Normal)
+            {
+                Platform::Input::SetCursorMode(Platform::CursorMode::Disabled);
+                LOG_INFO("Cursor disabled (FPS mode)");
+            }
+            else
+            {
+                Platform::Input::SetCursorMode(Platform::CursorMode::Normal);
+                LOG_INFO("Cursor enabled (Normal mode)");
+            }
+        }
+
+        // Demo: Log mouse movement when cursor is disabled
+        if (Platform::Input::GetCursorMode() == Platform::CursorMode::Disabled)
+        {
+            double deltaX = Platform::Input::GetMouseDeltaX();
+            double deltaY = Platform::Input::GetMouseDeltaY();
+            if (deltaX != 0.0 || deltaY != 0.0)
+            {
+                LOG_DEBUG("Mouse delta: ({:.1f}, {:.1f})", deltaX, deltaY);
+            }
+        }
+
+        // Demo: Log scroll wheel
+        double scrollDelta = Platform::Input::GetScrollDelta();
+        if (scrollDelta != 0.0)
+        {
+            LOG_INFO("Scroll delta: {:.1f}", scrollDelta);
+        }
+
         // Future: Render frame here
     }
 
     LOG_INFO("Vulkan Renderer shutting down...");
+
+    // Shutdown input system
+    Platform::Input::Shutdown();
 
     // Shutdown logging
     Core::Log::Shutdown();
