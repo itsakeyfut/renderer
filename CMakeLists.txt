@@ -180,12 +180,14 @@ set(RHI_SOURCES
     src/RHI/RHIDevice.cpp
     src/RHI/RHIInstance.cpp
     src/RHI/RHIPhysicalDevice.cpp
+    src/RHI/RHISwapchain.cpp
 )
 
 set(RHI_HEADERS
     src/RHI/RHIDevice.h
     src/RHI/RHIInstance.h
     src/RHI/RHIPhysicalDevice.h
+    src/RHI/RHISwapchain.h
 )
 
 add_library(RHI STATIC ${RHI_SOURCES} ${RHI_HEADERS})
@@ -249,6 +251,11 @@ if(BUILD_TESTS)
     add_executable(TestRHIDevice tests/TestRHIDevice.cpp)
     target_link_libraries(TestRHIDevice PRIVATE RHI Platform Core GTest::gtest_main)
     gtest_discover_tests(TestRHIDevice)
+
+    # RHI Swapchain test
+    add_executable(TestRHISwapchain tests/TestRHISwapchain.cpp)
+    target_link_libraries(TestRHISwapchain PRIVATE RHI Platform Core GTest::gtest_main)
+    gtest_discover_tests(TestRHISwapchain)
 endif()
 
 # =============================================================================
