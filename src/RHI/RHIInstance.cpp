@@ -195,6 +195,12 @@ namespace RHI
         uint32_t glfwExtensionCount = 0;
         const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
+        if (glfwExtensions == nullptr)
+        {
+            LOG_ERROR("GLFW failed to provide Vulkan extensions - Vulkan may not be supported");
+            return {};
+        }
+
         std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
 
         // Add debug utils extension for validation layer messaging
