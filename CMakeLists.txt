@@ -21,6 +21,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(spdlog)
 
+# nlohmann/json - JSON for Modern C++
+FetchContent_Declare(
+    nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG        v3.12.0
+)
+FetchContent_MakeAvailable(nlohmann_json)
+
 # GoogleTest - C++ Testing Framework
 FetchContent_Declare(
     googletest
@@ -65,12 +73,14 @@ endif()
 
 # Core library
 set(CORE_SOURCES
+    src/Core/Config.cpp
     src/Core/Log.cpp
     src/Core/Timer.cpp
 )
 
 set(CORE_HEADERS
     src/Core/Assert.h
+    src/Core/Config.h
     src/Core/Log.h
     src/Core/Timer.h
     src/Core/Types.h
@@ -78,7 +88,7 @@ set(CORE_HEADERS
 
 add_library(Core STATIC ${CORE_SOURCES} ${CORE_HEADERS})
 target_include_directories(Core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(Core PUBLIC spdlog::spdlog)
+target_link_libraries(Core PUBLIC spdlog::spdlog nlohmann_json::nlohmann_json)
 
 # =============================================================================
 # Tests
@@ -101,6 +111,11 @@ if(BUILD_TESTS)
     add_executable(TestTimer tests/TestTimer.cpp)
     target_link_libraries(TestTimer PRIVATE Core GTest::gtest_main)
     gtest_discover_tests(TestTimer)
+
+    # Config test
+    add_executable(TestConfig tests/TestConfig.cpp)
+    target_link_libraries(TestConfig PRIVATE Core GTest::gtest_main)
+    gtest_discover_tests(TestConfig)
 endif()
 
 # =============================================================================
