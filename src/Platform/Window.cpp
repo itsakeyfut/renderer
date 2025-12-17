@@ -1,6 +1,8 @@
 #include "Platform/Window.h"
-#include "Core/Log.h"
 #include "Core/Assert.h"
+#include "Core/Log.h"
+
+#include <cstdlib>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -25,7 +27,7 @@ namespace Platform
             if (!glfwInit())
             {
                 LOG_FATAL("Failed to initialize GLFW");
-                ASSERT_MSG(false, "Failed to initialize GLFW");
+                std::abort();
             }
 
             glfwSetErrorCallback(GLFWErrorCallback);
@@ -34,7 +36,7 @@ namespace Platform
             if (!glfwVulkanSupported())
             {
                 LOG_FATAL("Vulkan is not supported on this system");
-                ASSERT_MSG(false, "Vulkan not supported");
+                std::abort();
             }
 
             s_GLFWInitialized = true;
