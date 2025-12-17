@@ -225,7 +225,8 @@ namespace RHI
 
         if (!s_CreateDebugUtilsMessengerEXT)
         {
-            LOG_ERROR("Failed to load vkCreateDebugUtilsMessengerEXT function");
+            LOG_WARN("Failed to load vkCreateDebugUtilsMessengerEXT - validation messages will not be captured");
+            m_ValidationEnabled = false;
             return;
         }
 
@@ -235,7 +236,9 @@ namespace RHI
         VkResult result = s_CreateDebugUtilsMessengerEXT(m_Instance, &createInfo, nullptr, &m_DebugMessenger);
         if (result != VK_SUCCESS)
         {
-            LOG_ERROR("Failed to create debug messenger, VkResult: {}", static_cast<int>(result));
+            LOG_WARN("Failed to create debug messenger (VkResult: {}) - validation messages will not be captured",
+                static_cast<int>(result));
+            m_ValidationEnabled = false;
             return;
         }
 
