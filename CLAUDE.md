@@ -86,4 +86,7 @@ Managed via CMake FetchContent:
 ## Reference Documents
 
 - `specs/architecture.md` - Full architecture design
-- `specs/vulkan-renderer-spec.md` - Implementation phases and detailed spec
+- `specs/overview.md` - Project overview and tech stack
+- `specs/vulkan-concepts.md` - Core Vulkan concepts
+- `specs/implementation-phases.md` - Implementation phases and detailed tasks
+- `specs/checklist.md` - Progress tracking
