@@ -205,6 +205,11 @@ if(BUILD_TESTS)
     add_executable(TestConfig tests/TestConfig.cpp)
     target_link_libraries(TestConfig PRIVATE Core GTest::gtest_main)
     gtest_discover_tests(TestConfig)
+
+    # Window test
+    add_executable(TestWindow tests/TestWindow.cpp)
+    target_link_libraries(TestWindow PRIVATE Platform Core GTest::gtest_main)
+    gtest_discover_tests(TestWindow)
 endif()
 
 # =============================================================================

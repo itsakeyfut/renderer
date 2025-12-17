@@ -7,6 +7,10 @@
 
 // Forward declarations to avoid including GLFW/Vulkan headers in header
 struct GLFWwindow;
+struct VkInstance_T;
+struct VkSurfaceKHR_T;
+using VkInstance = VkInstance_T*;
+using VkSurfaceKHR = VkSurfaceKHR_T*;
 
 namespace Platform
 {
@@ -101,6 +105,16 @@ namespace Platform
          * @return Array of extension names
          */
         static const char** GetRequiredVulkanExtensions(uint32_t& count);
+
+        /**
+         * @brief Create a Vulkan surface for this window
+         * @param instance The Vulkan instance to create the surface with
+         * @return The created VkSurfaceKHR handle, or VK_NULL_HANDLE on failure
+         *
+         * The caller is responsible for destroying the returned surface using
+         * vkDestroySurfaceKHR when it is no longer needed.
+         */
+        VkSurfaceKHR CreateSurface(VkInstance instance) const;
 
         /**
          * @brief Set window title
