@@ -175,11 +175,24 @@ add_library(Platform STATIC ${PLATFORM_SOURCES} ${PLATFORM_HEADERS})
 target_include_directories(Platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(Platform PUBLIC Core glfw ${VULKAN_TARGET})
 
+# RHI library
+set(RHI_SOURCES
+    src/RHI/RHIInstance.cpp
+)
+
+set(RHI_HEADERS
+    src/RHI/RHIInstance.h
+)
+
+add_library(RHI STATIC ${RHI_SOURCES} ${RHI_HEADERS})
+target_include_directories(RHI PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(RHI PUBLIC Core Platform ${VULKAN_TARGET})
+
 # =============================================================================
 # Main Application
 # =============================================================================
 add_executable(VulkanRenderer src/main.cpp)
-target_link_libraries(VulkanRenderer PRIVATE Platform Core glm::glm GPUOpen::VulkanMemoryAllocator)
+target_link_libraries(VulkanRenderer PRIVATE RHI Platform Core glm::glm GPUOpen::VulkanMemoryAllocator)
 
 # =============================================================================
 # Tests
@@ -217,6 +230,11 @@ if(BUILD_TESTS)
     add_executable(TestInput tests/TestInput.cpp)
     target_link_libraries(TestInput PRIVATE Platform Core GTest::gtest_main)
     gtest_discover_tests(TestInput)
+
+    # RHI Instance test
+    add_executable(TestRHIInstance tests/TestRHIInstance.cpp)
+    target_link_libraries(TestRHIInstance PRIVATE RHI Platform Core GTest::gtest_main)
+    gtest_discover_tests(TestRHIInstance)
 endif()
 
 # =============================================================================
