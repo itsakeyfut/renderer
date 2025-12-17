@@ -29,6 +29,33 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
+# GLM - OpenGL Mathematics
+FetchContent_Declare(
+    glm
+    GIT_REPOSITORY https://github.com/g-truc/glm.git
+    GIT_TAG        1.0.2
+)
+FetchContent_MakeAvailable(glm)
+
+# GLFW - Window and input library
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    glfw
+    GIT_REPOSITORY https://github.com/glfw/glfw.git
+    GIT_TAG        3.4
+)
+FetchContent_MakeAvailable(glfw)
+
+# VMA - Vulkan Memory Allocator
+FetchContent_Declare(
+    vma
+    GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
+    GIT_TAG        v3.3.0
+)
+FetchContent_MakeAvailable(vma)
+
 # GoogleTest - C++ Testing Framework
 FetchContent_Declare(
     googletest
@@ -38,6 +65,49 @@ FetchContent_Declare(
 # For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
+
+# =============================================================================
+# Vulkan SDK
+# =============================================================================
+# Try to find Vulkan SDK - check common Windows installation paths if not found
+if(NOT DEFINED ENV{VULKAN_SDK})
+    # Check common Windows paths for Vulkan SDK
+    file(GLOB VULKAN_SDK_CANDIDATES "C:/VulkanSDK/*")
+    if(VULKAN_SDK_CANDIDATES)
+        list(SORT VULKAN_SDK_CANDIDATES ORDER DESCENDING)
+        list(GET VULKAN_SDK_CANDIDATES 0 VULKAN_SDK_PATH)
+        set(ENV{VULKAN_SDK} "${VULKAN_SDK_PATH}")
+        message(STATUS "Auto-detected Vulkan SDK: ${VULKAN_SDK_PATH}")
+    endif()
+endif()
+
+find_package(Vulkan QUIET)
+
+if(Vulkan_FOUND)
+    message(STATUS "Vulkan SDK found: ${Vulkan_INCLUDE_DIRS}")
+    set(VULKAN_TARGET Vulkan::Vulkan)
+    set(VULKAN_HEADERS_TARGET Vulkan::Headers)
+else()
+    message(STATUS "Vulkan SDK not found, using FetchContent for Vulkan headers")
+    message(STATUS "Note: For full Vulkan development, install the SDK from https://vulkan.lunarg.com/")
+
+    # Fetch Vulkan headers
+    FetchContent_Declare(
+        vulkan-headers
+        GIT_REPOSITORY https://github.com/KhronosGroup/Vulkan-Headers.git
+        GIT_TAG        v1.4.306
+    )
+    FetchContent_MakeAvailable(vulkan-headers)
+
+    # Create an interface library for Vulkan headers
+    add_library(VulkanHeaders INTERFACE)
+    target_include_directories(VulkanHeaders INTERFACE ${vulkan-headers_SOURCE_DIR}/include)
+
+    # For now, use just the headers with GLFW's built-in Vulkan loading
+    # volk will be added in RHI layer when we need direct Vulkan calls
+    set(VULKAN_TARGET VulkanHeaders)
+    set(VULKAN_HEADERS_TARGET VulkanHeaders)
+endif()
 
 # =============================================================================
 # Build Options
@@ -89,6 +159,25 @@ set(CORE_HEADERS
 add_library(Core STATIC ${CORE_SOURCES} ${CORE_HEADERS})
 target_include_directories(Core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(Core PUBLIC spdlog::spdlog nlohmann_json::nlohmann_json)
+
+# Platform library
+set(PLATFORM_SOURCES
+    src/Platform/Window.cpp
+)
+
+set(PLATFORM_HEADERS
+    src/Platform/Window.h
+)
+
+add_library(Platform STATIC ${PLATFORM_SOURCES} ${PLATFORM_HEADERS})
+target_include_directories(Platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(Platform PUBLIC Core glfw ${VULKAN_TARGET})
+
+# =============================================================================
+# Main Application
+# =============================================================================
+add_executable(VulkanRenderer src/main.cpp)
+target_link_libraries(VulkanRenderer PRIVATE Platform Core glm::glm GPUOpen::VulkanMemoryAllocator)
 
 # =============================================================================
 # Tests
