@@ -95,6 +95,11 @@ namespace RHI
         m_DesiredWidth = width;
         m_DesiredHeight = height;
 
+        // Store queue family indices for sharing mode determination
+        const auto& queueFamilies = device->GetQueueFamilies();
+        m_GraphicsFamily = queueFamilies.GraphicsFamily.value();
+        m_PresentFamily = queueFamilies.PresentFamily.value();
+
         return CreateSwapchain();
     }
 
@@ -169,12 +174,25 @@ namespace RHI
         createInfo.imageArrayLayers = 1;
         createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-        // Handle queue family sharing
-        // For simplicity, we use exclusive mode assuming graphics and present are the same family
-        // A more robust implementation would handle concurrent sharing if needed
-        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        createInfo.queueFamilyIndexCount = 0;
-        createInfo.pQueueFamilyIndices = nullptr;
+        // Handle queue family sharing mode
+        uint32_t queueFamilyIndices[] = {m_GraphicsFamily, m_PresentFamily};
+
+        if (m_GraphicsFamily != m_PresentFamily)
+        {
+            // Different queue families: use concurrent sharing mode
+            createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+            createInfo.queueFamilyIndexCount = 2;
+            createInfo.pQueueFamilyIndices = queueFamilyIndices;
+            LOG_DEBUG("Using concurrent sharing mode for swapchain (graphics: {}, present: {})",
+                m_GraphicsFamily, m_PresentFamily);
+        }
+        else
+        {
+            // Same queue family: use exclusive mode for better performance
+            createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            createInfo.queueFamilyIndexCount = 0;
+            createInfo.pQueueFamilyIndices = nullptr;
+        }
 
         createInfo.preTransform = supportDetails.Capabilities.currentTransform;
         createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;

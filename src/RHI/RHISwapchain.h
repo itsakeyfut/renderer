@@ -326,6 +326,10 @@ namespace RHI
         uint32_t m_DesiredWidth = 0;
         uint32_t m_DesiredHeight = 0;
 
+        // Queue family indices for sharing mode
+        uint32_t m_GraphicsFamily = 0;
+        uint32_t m_PresentFamily = 0;
+
         // State flags
         bool m_NeedsRecreation = false;
     };
