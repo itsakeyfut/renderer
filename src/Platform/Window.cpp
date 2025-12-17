@@ -1,5 +1,4 @@
 #include "Platform/Window.h"
-#include "Core/Assert.h"
 #include "Core/Log.h"
 
 #include <cstdlib>
@@ -57,7 +56,11 @@ namespace Platform
             nullptr
         );
 
-        ASSERT_MSG(m_Window != nullptr, "Failed to create GLFW window");
+        if (!m_Window)
+        {
+            LOG_FATAL("Failed to create GLFW window");
+            std::abort();
+        }
 
         // Store this pointer for callbacks
         glfwSetWindowUserPointer(m_Window, this);
