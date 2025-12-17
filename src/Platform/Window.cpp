@@ -170,6 +170,21 @@ namespace Platform
         return glfwGetRequiredInstanceExtensions(&count);
     }
 
+    VkSurfaceKHR Window::CreateSurface(VkInstance instance) const
+    {
+        VkSurfaceKHR surface = VK_NULL_HANDLE;
+        VkResult result = glfwCreateWindowSurface(instance, m_Window, nullptr, &surface);
+
+        if (result != VK_SUCCESS)
+        {
+            LOG_ERROR("Failed to create Vulkan window surface, VkResult: {}", static_cast<int>(result));
+            return VK_NULL_HANDLE;
+        }
+
+        LOG_INFO("Vulkan window surface created successfully");
+        return surface;
+    }
+
     void Window::SetTitle(const std::string& title)
     {
         glfwSetWindowTitle(m_Window, title.c_str());
