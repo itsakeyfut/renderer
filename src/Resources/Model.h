@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "Core/Assert.h"
 #include "Core/Types.h"
 #include <string>
 #include <vector>
@@ -112,14 +113,22 @@ public:
      * @param index Mesh index.
      * @return Reference to the mesh.
      */
-    const Mesh& GetMesh(size_t index) const { return m_Meshes[index]; }
+    const Mesh& GetMesh(size_t index) const
+    {
+        ASSERT(index < m_Meshes.size());
+        return m_Meshes[index];
+    }
 
     /**
      * @brief Gets mutable access to a mesh.
      * @param index Mesh index.
      * @return Mutable reference to the mesh.
      */
-    Mesh& GetMesh(size_t index) { return m_Meshes[index]; }
+    Mesh& GetMesh(size_t index)
+    {
+        ASSERT(index < m_Meshes.size());
+        return m_Meshes[index];
+    }
 
     /**
      * @brief Gets all meshes.
