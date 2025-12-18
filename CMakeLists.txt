@@ -254,11 +254,12 @@ set(RESOURCES_HEADERS
     src/Resources/Texture.h
     src/Resources/Model.h
     src/Resources/Material.h
+    src/Resources/Vertex.h
 )
 
 add_library(Resources STATIC ${RESOURCES_SOURCES} ${RESOURCES_HEADERS})
 target_include_directories(Resources PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(Resources PUBLIC Core)
+target_link_libraries(Resources PUBLIC Core glm::glm ${VULKAN_HEADERS_TARGET})
 
 # Scene library (header-only for now)
 set(SCENE_HEADERS
@@ -390,6 +391,11 @@ if(BUILD_TESTS)
     add_executable(TestResourceManager tests/TestResourceManager.cpp)
     target_link_libraries(TestResourceManager PRIVATE Resources Core GTest::gtest_main)
     gtest_discover_tests(TestResourceManager)
+
+    # Vertex test
+    add_executable(TestVertex tests/TestVertex.cpp)
+    target_link_libraries(TestVertex PRIVATE Resources Core GTest::gtest_main)
+    gtest_discover_tests(TestVertex)
 endif()
 
 # =============================================================================

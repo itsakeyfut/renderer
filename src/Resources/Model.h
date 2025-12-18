@@ -10,21 +10,14 @@
 
 #include "Core/Assert.h"
 #include "Core/Types.h"
+#include "Resources/Vertex.h"
+
+#include <algorithm>
+#include <cstdint>
 #include <string>
 #include <vector>
-#include <cstdint>
 
 namespace Resources {
-
-/**
- * @brief Vertex data structure.
- */
-struct Vertex {
-    float Position[3] = {0.0f, 0.0f, 0.0f};
-    float Normal[3] = {0.0f, 1.0f, 0.0f};
-    float TexCoord[2] = {0.0f, 0.0f};
-    float Tangent[4] = {1.0f, 0.0f, 0.0f, 1.0f};  // w = handedness
-};
 
 /**
  * @brief Mesh primitive within a model.
@@ -163,20 +156,18 @@ public:
         for (const auto& mesh : m_Meshes) {
             for (const auto& vertex : mesh.Vertices) {
                 if (first) {
-                    m_Bounds.Min[0] = m_Bounds.Max[0] = vertex.Position[0];
-                    m_Bounds.Min[1] = m_Bounds.Max[1] = vertex.Position[1];
-                    m_Bounds.Min[2] = m_Bounds.Max[2] = vertex.Position[2];
+                    m_Bounds.Min[0] = m_Bounds.Max[0] = vertex.Position.x;
+                    m_Bounds.Min[1] = m_Bounds.Max[1] = vertex.Position.y;
+                    m_Bounds.Min[2] = m_Bounds.Max[2] = vertex.Position.z;
                     first = false;
                 }
                 else {
-                    for (int i = 0; i < 3; ++i) {
-                        if (vertex.Position[i] < m_Bounds.Min[i]) {
-                            m_Bounds.Min[i] = vertex.Position[i];
-                        }
-                        if (vertex.Position[i] > m_Bounds.Max[i]) {
-                            m_Bounds.Max[i] = vertex.Position[i];
-                        }
-                    }
+                    m_Bounds.Min[0] = std::min(m_Bounds.Min[0], vertex.Position.x);
+                    m_Bounds.Min[1] = std::min(m_Bounds.Min[1], vertex.Position.y);
+                    m_Bounds.Min[2] = std::min(m_Bounds.Min[2], vertex.Position.z);
+                    m_Bounds.Max[0] = std::max(m_Bounds.Max[0], vertex.Position.x);
+                    m_Bounds.Max[1] = std::max(m_Bounds.Max[1], vertex.Position.y);
+                    m_Bounds.Max[2] = std::max(m_Bounds.Max[2], vertex.Position.z);
                 }
             }
         }
