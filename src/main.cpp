@@ -431,6 +431,12 @@ int main()
             LOG_DEBUG("Swapchain recreated: {}x{}",
                      swapchain->GetExtent().width,
                      swapchain->GetExtent().height);
+
+            // Advance to next frame to avoid reusing the signaled semaphore.
+            // When AcquireNextImage succeeds with VK_SUBOPTIMAL_KHR, the semaphore
+            // is signaled but not consumed. Advancing the frame ensures the next
+            // iteration uses a different semaphore.
+            frameManager->NextFrame();
             continue;
         }
 

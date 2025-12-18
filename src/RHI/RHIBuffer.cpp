@@ -116,7 +116,12 @@ namespace RHI
             VkCommandBuffer cmdHandle = commandBuffer->GetHandle();
             submitInfo.pCommandBuffers = &cmdHandle;
 
-            vkQueueSubmit(device->GetGraphicsQueue(), 1, &submitInfo, VK_NULL_HANDLE);
+            VkResult submitResult = vkQueueSubmit(device->GetGraphicsQueue(), 1, &submitInfo, VK_NULL_HANDLE);
+            if (submitResult != VK_SUCCESS)
+            {
+                LOG_ERROR("Failed to submit transfer command: VkResult {}", static_cast<int>(submitResult));
+                return nullptr;
+            }
             vkQueueWaitIdle(device->GetGraphicsQueue());
 
             return dstBuffer;
@@ -198,6 +203,7 @@ namespace RHI
         {
             m_MappedData = allocationInfo.pMappedData;
             m_IsMapped = true;
+            m_PersistentlyMapped = true;
         }
 
         return true;
@@ -234,7 +240,12 @@ namespace RHI
             return;
         }
 
-        // Only unmap if we mapped it ourselves (not via VMA_ALLOCATION_CREATE_MAPPED_BIT)
+        // Don't unmap persistently mapped buffers (created with VMA_ALLOCATION_CREATE_MAPPED_BIT)
+        if (m_PersistentlyMapped)
+        {
+            return;
+        }
+
         vmaUnmapMemory(m_Allocator, m_Allocation);
         m_MappedData = nullptr;
         m_IsMapped = false;

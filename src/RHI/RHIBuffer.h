@@ -241,6 +241,7 @@ namespace RHI
         MemoryUsage m_MemoryUsage = MemoryUsage::GpuOnly;
         void* m_MappedData = nullptr;
         bool m_IsMapped = false;
+        bool m_PersistentlyMapped = false;
     };
 
 } // namespace RHI
