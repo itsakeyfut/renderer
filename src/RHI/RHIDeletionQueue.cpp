@@ -41,10 +41,11 @@ namespace RHI
         entry.Deletor = std::move(deletor);
         entry.QueuedFrame = m_CurrentFrame;
 
+        uint32_t queuedFrame = entry.QueuedFrame;
         m_DeletionQueue.push_back(std::move(entry));
 
         LOG_TRACE("Queued deletion for frame {} (current: {})",
-                  entry.QueuedFrame + m_FrameDelay, m_CurrentFrame);
+                  queuedFrame + m_FrameDelay, m_CurrentFrame);
     }
 
     void RHIDeletionQueue::Push(const Deletor& deletor)
@@ -61,10 +62,11 @@ namespace RHI
         entry.Deletor = deletor;
         entry.QueuedFrame = m_CurrentFrame;
 
+        uint32_t queuedFrame = entry.QueuedFrame;
         m_DeletionQueue.push_back(std::move(entry));
 
         LOG_TRACE("Queued deletion for frame {} (current: {})",
-                  entry.QueuedFrame + m_FrameDelay, m_CurrentFrame);
+                  queuedFrame + m_FrameDelay, m_CurrentFrame);
     }
 
     void RHIDeletionQueue::Flush(uint32_t currentFrame)
