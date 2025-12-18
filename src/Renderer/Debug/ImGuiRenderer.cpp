@@ -89,6 +89,7 @@ namespace Renderer
         if (!CreateDescriptorPool(m_Device))
         {
             LOG_ERROR("Failed to create ImGui descriptor pool");
+            ImGui::DestroyContext();
             return false;
         }
 
@@ -97,6 +98,8 @@ namespace Renderer
         if (!ImGui_ImplGlfw_InitForVulkan(glfwWindow, true))
         {
             LOG_ERROR("Failed to initialize ImGui GLFW backend");
+            vkDestroyDescriptorPool(m_Device, m_DescriptorPool, nullptr);
+            ImGui::DestroyContext();
             return false;
         }
 
@@ -133,9 +136,10 @@ namespace Renderer
         {
             LOG_ERROR("Failed to initialize ImGui Vulkan backend");
             ImGui_ImplGlfw_Shutdown();
+            vkDestroyDescriptorPool(m_Device, m_DescriptorPool, nullptr);
+            ImGui::DestroyContext();
             return false;
         }
-
 
         m_Initialized = true;
         LOG_INFO("ImGui renderer initialized");
