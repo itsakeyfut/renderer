@@ -17,6 +17,16 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
+## アプリケーション実行
+
+```bash
+# Windowsの場合
+./build/VulkanRenderer.exe
+
+# または
+build/VulkanRenderer.exe
+```
+
 ## テスト実行
 
 ```bash
