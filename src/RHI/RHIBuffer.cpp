@@ -299,6 +299,9 @@ namespace RHI
         case BufferUsage::Staging:
             return VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
+        case BufferUsage::Indirect:
+            return VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
         case BufferUsage::TransferSrc:
             return VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 

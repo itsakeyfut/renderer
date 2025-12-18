@@ -346,6 +346,11 @@ if(BUILD_TESTS)
     target_link_libraries(TestRHIDevice PRIVATE RHI Platform Core GTest::gtest_main)
     gtest_discover_tests(TestRHIDevice)
 
+    # RHI Buffer test
+    add_executable(TestRHIBuffer tests/TestRHIBuffer.cpp)
+    target_link_libraries(TestRHIBuffer PRIVATE RHI Platform Core GTest::gtest_main)
+    gtest_discover_tests(TestRHIBuffer)
+
     # RHI Swapchain test
     add_executable(TestRHISwapchain tests/TestRHISwapchain.cpp)
     target_link_libraries(TestRHISwapchain PRIVATE RHI Platform Core GTest::gtest_main)
