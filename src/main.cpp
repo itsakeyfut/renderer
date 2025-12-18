@@ -290,6 +290,13 @@ int main()
     }
     LOG_INFO("Frame manager created ({} frames in flight)", Renderer::MAX_FRAMES_IN_FLIGHT);
 
+    // Create render finished semaphores (one per swapchain image)
+    if (!frameManager->CreateRenderFinishedSemaphores(device, swapchain->GetImageCount()))
+    {
+        LOG_FATAL("Failed to create render finished semaphores!");
+        return EXIT_FAILURE;
+    }
+
     // =========================================================================
     // Vertex Buffer
     // =========================================================================
@@ -423,11 +430,31 @@ int main()
             framebufferResized = false;
             device->WaitIdle();
 
+            // Reset all sync primitives (fences and semaphores) after WaitIdle.
+            // This prevents deadlocks and validation errors from primitives
+            // that were signaled but never consumed due to swapchain recreation.
+            if (!frameManager->ResetSyncPrimitives(device))
+            {
+                LOG_ERROR("Failed to reset sync primitives after device idle");
+                break;
+            }
+
             if (!RecreateSwapchain(swapchain, window))
             {
                 LOG_ERROR("Failed to recreate swapchain");
                 break;
             }
+
+            // Recreate render finished semaphores if swapchain image count changed
+            if (frameManager->GetRenderFinishedSemaphoreCount() != swapchain->GetImageCount())
+            {
+                if (!frameManager->CreateRenderFinishedSemaphores(device, swapchain->GetImageCount()))
+                {
+                    LOG_ERROR("Failed to recreate render finished semaphores");
+                    break;
+                }
+            }
+
             LOG_DEBUG("Swapchain recreated: {}x{}",
                      swapchain->GetExtent().width,
                      swapchain->GetExtent().height);
@@ -463,7 +490,7 @@ int main()
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &cmdHandle;
 
-        VkSemaphore signalSemaphores[] = {frameManager->GetRenderFinishedSemaphore()};
+        VkSemaphore signalSemaphores[] = {frameManager->GetRenderFinishedSemaphore(imageIndex)};
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = signalSemaphores;
 
@@ -483,7 +510,7 @@ int main()
         bool presentResult = swapchain->Present(
             device->GetPresentQueue(),
             imageIndex,
-            frameManager->GetRenderFinishedSemaphore());
+            frameManager->GetRenderFinishedSemaphore(imageIndex));
 
         if (!presentResult || swapchain->NeedsRecreation())
         {
@@ -504,6 +531,11 @@ int main()
 
     // Explicit cleanup (RAII will handle most of this)
     pipeline.reset();
+
+    // Clear pipelineDesc shader references (it holds Core::Ref to shaders)
+    pipelineDesc.VertexShader.reset();
+    pipelineDesc.FragmentShader.reset();
+
     fragmentShader.reset();
     vertexShader.reset();
     vertexBuffer.reset();

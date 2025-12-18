@@ -39,6 +39,8 @@ namespace Renderer
     {
         ASSERT(device != nullptr);
 
+        m_Device = device;
+
         // Create a shared command pool for all frame command buffers
         // Using AllowReset=true so each command buffer can be reset individually
         RHI::RHICommandPoolConfig poolConfig{};
@@ -90,14 +92,6 @@ namespace Renderer
             return false;
         }
 
-        // Create render finished semaphore
-        frameData.RenderFinishedSemaphore = RHI::RHISemaphore::Create(device);
-        if (!frameData.RenderFinishedSemaphore)
-        {
-            LOG_ERROR("Failed to create render finished semaphore for frame");
-            return false;
-        }
-
         // Create in-flight fence (signaled state to prevent deadlock on first frame)
         frameData.InFlightFence = RHI::RHIFence::Create(device, true);
         if (!frameData.InFlightFence)
@@ -106,6 +100,33 @@ namespace Renderer
             return false;
         }
 
+        return true;
+    }
+
+    bool FrameManager::CreateRenderFinishedSemaphores(
+        const Core::Ref<RHI::RHIDevice>& device,
+        uint32_t imageCount)
+    {
+        ASSERT(device != nullptr);
+        ASSERT(imageCount > 0);
+
+        // Clear existing semaphores (they will be destroyed via RAII)
+        m_RenderFinishedSemaphores.clear();
+        m_RenderFinishedSemaphores.reserve(imageCount);
+
+        for (uint32_t i = 0; i < imageCount; ++i)
+        {
+            auto semaphore = RHI::RHISemaphore::Create(device);
+            if (!semaphore)
+            {
+                LOG_ERROR("Failed to create render finished semaphore for image {}", i);
+                m_RenderFinishedSemaphores.clear();
+                return false;
+            }
+            m_RenderFinishedSemaphores.push_back(std::move(semaphore));
+        }
+
+        LOG_DEBUG("Created {} render finished semaphores for swapchain images", imageCount);
         return true;
     }
 
@@ -131,14 +152,49 @@ namespace Renderer
         m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
+    void FrameManager::ResetCurrentFence()
+    {
+        auto& frame = m_Frames[m_CurrentFrame];
+        frame.InFlightFence->Reset();
+    }
+
+    bool FrameManager::ResetSyncPrimitives(const Core::Ref<RHI::RHIDevice>& device)
+    {
+        // After device->WaitIdle(), all GPU work is complete.
+        // Recreate all fences and semaphores to ensure clean state.
+        // This is necessary because:
+        // - Fences may have been reset but never submitted (causing deadlocks)
+        // - Semaphores may have been signaled but never waited on (causing validation errors)
+        for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+        {
+            // Recreate fence in signaled state
+            m_Frames[i].InFlightFence = RHI::RHIFence::Create(device, true);
+            if (!m_Frames[i].InFlightFence)
+            {
+                LOG_ERROR("Failed to recreate fence for frame {}", i);
+                return false;
+            }
+
+            // Recreate semaphore in unsignaled state
+            m_Frames[i].ImageAvailableSemaphore = RHI::RHISemaphore::Create(device);
+            if (!m_Frames[i].ImageAvailableSemaphore)
+            {
+                LOG_ERROR("Failed to recreate semaphore for frame {}", i);
+                return false;
+            }
+        }
+        return true;
+    }
+
     VkSemaphore FrameManager::GetImageAvailableSemaphore() const
     {
         return m_Frames[m_CurrentFrame].ImageAvailableSemaphore->GetHandle();
     }
 
-    VkSemaphore FrameManager::GetRenderFinishedSemaphore() const
+    VkSemaphore FrameManager::GetRenderFinishedSemaphore(uint32_t imageIndex) const
     {
-        return m_Frames[m_CurrentFrame].RenderFinishedSemaphore->GetHandle();
+        ASSERT(imageIndex < m_RenderFinishedSemaphores.size());
+        return m_RenderFinishedSemaphores[imageIndex]->GetHandle();
     }
 
     VkFence FrameManager::GetInFlightFence() const

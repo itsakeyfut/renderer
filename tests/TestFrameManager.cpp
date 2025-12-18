@@ -131,9 +131,7 @@ TEST_F(FrameManagerTest, CurrentFrameHasValidSemaphores) {
 
     auto& frame = m_FrameManager->GetCurrentFrame();
     ASSERT_NE(frame.ImageAvailableSemaphore, nullptr);
-    ASSERT_NE(frame.RenderFinishedSemaphore, nullptr);
     EXPECT_NE(frame.ImageAvailableSemaphore->GetHandle(), VK_NULL_HANDLE);
-    EXPECT_NE(frame.RenderFinishedSemaphore->GetHandle(), VK_NULL_HANDLE);
 }
 
 TEST_F(FrameManagerTest, CurrentFrameHasValidFence) {
@@ -157,7 +155,6 @@ TEST_F(FrameManagerTest, AllFramesHaveValidResources) {
         auto& frame = m_FrameManager->GetFrame(i);
         ASSERT_NE(frame.CommandBuffer, nullptr) << "Frame " << i << " has null command buffer";
         ASSERT_NE(frame.ImageAvailableSemaphore, nullptr) << "Frame " << i << " has null image available semaphore";
-        ASSERT_NE(frame.RenderFinishedSemaphore, nullptr) << "Frame " << i << " has null render finished semaphore";
         ASSERT_NE(frame.InFlightFence, nullptr) << "Frame " << i << " has null in-flight fence";
     }
 }
@@ -174,7 +171,6 @@ TEST_F(FrameManagerTest, EachFrameHasDistinctResources) {
     // Each frame should have distinct resources
     EXPECT_NE(frame0.CommandBuffer->GetHandle(), frame1.CommandBuffer->GetHandle());
     EXPECT_NE(frame0.ImageAvailableSemaphore->GetHandle(), frame1.ImageAvailableSemaphore->GetHandle());
-    EXPECT_NE(frame0.RenderFinishedSemaphore->GetHandle(), frame1.RenderFinishedSemaphore->GetHandle());
     EXPECT_NE(frame0.InFlightFence->GetHandle(), frame1.InFlightFence->GetHandle());
 }
 
@@ -245,8 +241,15 @@ TEST_F(FrameManagerTest, GetRenderFinishedSemaphoreReturnsValidHandle) {
     m_FrameManager = Renderer::FrameManager::Create(m_Device);
     ASSERT_NE(m_FrameManager, nullptr);
 
-    VkSemaphore semaphore = m_FrameManager->GetRenderFinishedSemaphore();
-    EXPECT_NE(semaphore, VK_NULL_HANDLE);
+    // Create render finished semaphores for 3 swapchain images
+    constexpr uint32_t imageCount = 3;
+    ASSERT_TRUE(m_FrameManager->CreateRenderFinishedSemaphores(m_Device, imageCount));
+
+    // Each image index should return a valid semaphore
+    for (uint32_t i = 0; i < imageCount; ++i) {
+        VkSemaphore semaphore = m_FrameManager->GetRenderFinishedSemaphore(i);
+        EXPECT_NE(semaphore, VK_NULL_HANDLE) << "Image " << i << " has null render finished semaphore";
+    }
 }
 
 TEST_F(FrameManagerTest, GetInFlightFenceReturnsValidHandle) {
@@ -268,7 +271,6 @@ TEST_F(FrameManagerTest, ConvenienceAccessorsMatchCurrentFrame) {
     auto& frame = m_FrameManager->GetCurrentFrame();
 
     EXPECT_EQ(m_FrameManager->GetImageAvailableSemaphore(), frame.ImageAvailableSemaphore->GetHandle());
-    EXPECT_EQ(m_FrameManager->GetRenderFinishedSemaphore(), frame.RenderFinishedSemaphore->GetHandle());
     EXPECT_EQ(m_FrameManager->GetInFlightFence(), frame.InFlightFence->GetHandle());
 }
 
