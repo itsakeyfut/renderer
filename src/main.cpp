@@ -454,26 +454,23 @@ int main()
         displayFPS = frameTimer.GetFPS();
         displayFrameTime = frameTimer.GetFrameTimeMs();
 
-        window.PollEvents();
+        // Update input state BEFORE polling events
+        // This preserves the previous frame's state for press/release detection
         Platform::Input::Update();
+        window.PollEvents();
 
-        // Handle ESC key (only if ImGui doesn't want keyboard)
-        if (!imguiRenderer->WantCaptureKeyboard())
+        // Global application shortcuts (always active)
+        if (Platform::Input::IsKeyPressed(Platform::KeyCode::Escape))
         {
-            if (Platform::Input::IsKeyPressed(Platform::KeyCode::Escape))
-            {
-                break;
-            }
-
-            // Toggle debug windows
-            if (Platform::Input::IsKeyPressed(Platform::KeyCode::F1))
-            {
-                showStatsWindow = !showStatsWindow;
-            }
-            if (Platform::Input::IsKeyPressed(Platform::KeyCode::F2))
-            {
-                showDemoWindow = !showDemoWindow;
-            }
+            break;
+        }
+        if (Platform::Input::IsKeyPressed(Platform::KeyCode::F1))
+        {
+            showStatsWindow = !showStatsWindow;
+        }
+        if (Platform::Input::IsKeyPressed(Platform::KeyCode::F2))
+        {
+            showDemoWindow = !showDemoWindow;
         }
 
         // Handle window minimization
