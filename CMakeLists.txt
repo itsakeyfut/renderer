@@ -242,6 +242,29 @@ add_library(RHI STATIC ${RHI_SOURCES} ${RHI_HEADERS})
 target_include_directories(RHI PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(RHI PUBLIC Core Platform ${VULKAN_TARGET} GPUOpen::VulkanMemoryAllocator)
 
+# Resources library (header-only for now)
+set(RESOURCES_HEADERS
+    src/Resources/ResourceHandle.h
+)
+
+add_library(Resources INTERFACE)
+target_sources(Resources INTERFACE ${RESOURCES_HEADERS})
+target_include_directories(Resources INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(Resources INTERFACE Core)
+
+# Scene library (header-only for now)
+set(SCENE_HEADERS
+    src/Scene/Entity.h
+    src/Scene/Light.h
+    src/Scene/Scene.h
+    src/Scene/Transform.h
+)
+
+add_library(Scene INTERFACE)
+target_sources(Scene INTERFACE ${SCENE_HEADERS})
+target_include_directories(Scene INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(Scene INTERFACE Core Resources glm::glm)
+
 # Renderer library
 set(RENDERER_SOURCES
     src/Renderer/FrameManager.cpp
@@ -255,7 +278,7 @@ set(RENDERER_HEADERS
 
 add_library(Renderer STATIC ${RENDERER_SOURCES} ${RENDERER_HEADERS})
 target_include_directories(Renderer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(Renderer PUBLIC RHI imgui)
+target_link_libraries(Renderer PUBLIC RHI Scene imgui)
 
 # =============================================================================
 # Main Application
@@ -344,6 +367,11 @@ if(BUILD_TESTS)
     add_executable(TestRHIDeletionQueue tests/TestRHIDeletionQueue.cpp)
     target_link_libraries(TestRHIDeletionQueue PRIVATE RHI Platform Core GTest::gtest_main)
     gtest_discover_tests(TestRHIDeletionQueue)
+
+    # Scene test
+    add_executable(TestScene tests/TestScene.cpp)
+    target_link_libraries(TestScene PRIVATE Scene Resources Core glm::glm GTest::gtest_main)
+    gtest_discover_tests(TestScene)
 endif()
 
 # =============================================================================
