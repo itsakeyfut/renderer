@@ -75,6 +75,11 @@ namespace Platform
         void PollEvents() const;
 
         /**
+         * @brief Wait for window events (blocks until an event occurs)
+         */
+        void WaitEvents() const;
+
+        /**
          * @brief Get the native GLFW window handle
          * @return Pointer to GLFWwindow
          */
