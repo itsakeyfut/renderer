@@ -180,9 +180,11 @@ set(RHI_SOURCES
     src/RHI/RHICommandBuffer.cpp
     src/RHI/RHICommandPool.cpp
     src/RHI/RHIDevice.cpp
+    src/RHI/RHIFence.cpp
     src/RHI/RHIInstance.cpp
     src/RHI/RHIPhysicalDevice.cpp
     src/RHI/RHIPipeline.cpp
+    src/RHI/RHISemaphore.cpp
     src/RHI/RHIShader.cpp
     src/RHI/RHISwapchain.cpp
 )
@@ -191,9 +193,11 @@ set(RHI_HEADERS
     src/RHI/RHICommandBuffer.h
     src/RHI/RHICommandPool.h
     src/RHI/RHIDevice.h
+    src/RHI/RHIFence.h
     src/RHI/RHIInstance.h
     src/RHI/RHIPhysicalDevice.h
     src/RHI/RHIPipeline.h
+    src/RHI/RHISemaphore.h
     src/RHI/RHIShader.h
     src/RHI/RHISwapchain.h
 )
