@@ -36,6 +36,7 @@ protected:
 
 TEST_F(InputTest, InitializesWithWindow) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
 
     EXPECT_NO_THROW({
@@ -51,6 +52,7 @@ TEST_F(InputTest, ShutdownWithoutInitDoesNotCrash) {
 
 TEST_F(InputTest, CanReinitializeAfterShutdown) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
 
     Platform::Input::Init(window);
@@ -74,6 +76,7 @@ TEST_F(InputTest, IsKeyDownReturnsFalseBeforeInit) {
 
 TEST_F(InputTest, IsKeyDownReturnsFalseAfterInit) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
     Platform::Input::Init(window);
 
@@ -86,6 +89,7 @@ TEST_F(InputTest, IsKeyDownReturnsFalseAfterInit) {
 
 TEST_F(InputTest, IsKeyPressedReturnsFalseInitially) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
     Platform::Input::Init(window);
 
@@ -95,6 +99,7 @@ TEST_F(InputTest, IsKeyPressedReturnsFalseInitially) {
 
 TEST_F(InputTest, IsKeyReleasedReturnsFalseInitially) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
     Platform::Input::Init(window);
 
@@ -108,6 +113,7 @@ TEST_F(InputTest, IsKeyReleasedReturnsFalseInitially) {
 
 TEST_F(InputTest, IsMouseButtonDownReturnsFalseInitially) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
     Platform::Input::Init(window);
 
@@ -118,6 +124,7 @@ TEST_F(InputTest, IsMouseButtonDownReturnsFalseInitially) {
 
 TEST_F(InputTest, IsMouseButtonPressedReturnsFalseInitially) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
     Platform::Input::Init(window);
 
@@ -127,6 +134,7 @@ TEST_F(InputTest, IsMouseButtonPressedReturnsFalseInitially) {
 
 TEST_F(InputTest, IsMouseButtonReleasedReturnsFalseInitially) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
     Platform::Input::Init(window);
 
@@ -140,6 +148,7 @@ TEST_F(InputTest, IsMouseButtonReleasedReturnsFalseInitially) {
 
 TEST_F(InputTest, GetMousePositionReturnsValidValues) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
     Platform::Input::Init(window);
 
@@ -155,6 +164,7 @@ TEST_F(InputTest, GetMousePositionReturnsValidValues) {
 
 TEST_F(InputTest, GetMouseDeltaReturnsZeroInitially) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
     Platform::Input::Init(window);
 
@@ -165,6 +175,7 @@ TEST_F(InputTest, GetMouseDeltaReturnsZeroInitially) {
 
 TEST_F(InputTest, GetScrollDeltaReturnsZeroInitially) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
     Platform::Input::Init(window);
 
@@ -183,6 +194,7 @@ TEST_F(InputTest, UpdateDoesNotCrashBeforeInit) {
 
 TEST_F(InputTest, UpdateDoesNotCrashAfterInit) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
     Platform::Input::Init(window);
 
@@ -195,6 +207,7 @@ TEST_F(InputTest, UpdateDoesNotCrashAfterInit) {
 
 TEST_F(InputTest, UpdateResetsScrollDelta) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
     Platform::Input::Init(window);
 
@@ -209,6 +222,7 @@ TEST_F(InputTest, UpdateResetsScrollDelta) {
 
 TEST_F(InputTest, GetCursorModeReturnsNormalByDefault) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
     Platform::Input::Init(window);
 
@@ -217,6 +231,7 @@ TEST_F(InputTest, GetCursorModeReturnsNormalByDefault) {
 
 TEST_F(InputTest, SetCursorModeDoesNotCrash) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
     Platform::Input::Init(window);
 
@@ -230,6 +245,7 @@ TEST_F(InputTest, SetCursorModeDoesNotCrash) {
 
 TEST_F(InputTest, SetCursorModeUpdatesState) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
     Platform::Input::Init(window);
 
@@ -275,6 +291,7 @@ TEST_F(InputTest, MouseButtonValuesMatchGLFW) {
 
 TEST_F(InputTest, HandlesInvalidKeyCodeGracefully) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
     Platform::Input::Init(window);
 
@@ -287,6 +304,7 @@ TEST_F(InputTest, HandlesInvalidKeyCodeGracefully) {
 
 TEST_F(InputTest, HandlesInvalidMouseButtonGracefully) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
     Platform::Input::Init(window);
 

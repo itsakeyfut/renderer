@@ -24,6 +24,12 @@ namespace Platform
         std::string Title = "Vulkan Renderer";
         bool Resizable = true;
         bool Fullscreen = false;
+
+        /**
+         * @brief Whether the window should be visible.
+         * Set to false for headless testing to avoid window flashing.
+         */
+        bool Visible = true;
     };
 
     /**

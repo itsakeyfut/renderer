@@ -45,6 +45,7 @@ namespace Platform
         // Don't create OpenGL context - we're using Vulkan
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         glfwWindowHint(GLFW_RESIZABLE, config.Resizable ? GLFW_TRUE : GLFW_FALSE);
+        glfwWindowHint(GLFW_VISIBLE, config.Visible ? GLFW_TRUE : GLFW_FALSE);
 
         // Create the window
         GLFWmonitor* monitor = config.Fullscreen ? glfwGetPrimaryMonitor() : nullptr;
