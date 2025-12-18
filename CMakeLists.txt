@@ -177,6 +177,8 @@ target_link_libraries(Platform PUBLIC Core glfw ${VULKAN_TARGET})
 
 # RHI library
 set(RHI_SOURCES
+    src/RHI/RHICommandBuffer.cpp
+    src/RHI/RHICommandPool.cpp
     src/RHI/RHIDevice.cpp
     src/RHI/RHIInstance.cpp
     src/RHI/RHIPhysicalDevice.cpp
@@ -184,6 +186,8 @@ set(RHI_SOURCES
 )
 
 set(RHI_HEADERS
+    src/RHI/RHICommandBuffer.h
+    src/RHI/RHICommandPool.h
     src/RHI/RHIDevice.h
     src/RHI/RHIInstance.h
     src/RHI/RHIPhysicalDevice.h
@@ -256,6 +260,11 @@ if(BUILD_TESTS)
     add_executable(TestRHISwapchain tests/TestRHISwapchain.cpp)
     target_link_libraries(TestRHISwapchain PRIVATE RHI Platform Core GTest::gtest_main)
     gtest_discover_tests(TestRHISwapchain)
+
+    # RHI Command Buffer test
+    add_executable(TestRHICommandBuffer tests/TestRHICommandBuffer.cpp)
+    target_link_libraries(TestRHICommandBuffer PRIVATE RHI Platform Core GTest::gtest_main)
+    gtest_discover_tests(TestRHICommandBuffer)
 endif()
 
 # =============================================================================
