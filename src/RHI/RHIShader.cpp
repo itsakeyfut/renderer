@@ -71,7 +71,8 @@ namespace RHI
     static bool ContainsShellMetacharacters(const std::string& str)
     {
         // Characters that could enable command injection in shell contexts
-        static const char* dangerousChars = ";|&`$<>(){}[]!#~\n\r";
+        // or break command line parsing (quotes, backslash, whitespace)
+        static const char* dangerousChars = ";|&`$<>(){}[]!#~\n\r\"'\\ \t";
 
         for (char c : str)
         {
@@ -111,6 +112,31 @@ namespace RHI
     }
 
     /**
+     * @brief Check if a path contains dangerous shell metacharacters
+     * @param path The path to check
+     * @return true if the path contains dangerous characters
+     *
+     * Note: Unlike ContainsShellMetacharacters(), this allows spaces and
+     * backslashes since they are common in file paths. Paths are quoted
+     * on Windows or passed as separate arguments on POSIX.
+     */
+    static bool PathContainsDangerousChars(const std::string& path)
+    {
+        // Characters dangerous in paths (excludes space and backslash which are common in paths)
+        static const char* dangerousChars = ";|&`$<>(){}[]!#~\n\r\"'";
+
+        for (char c : path)
+        {
+            if (std::strchr(dangerousChars, c) != nullptr)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * @brief Validate a file path for use in command line
      * @param path The path to validate
      * @return true if the path is safe to use
@@ -122,7 +148,7 @@ namespace RHI
             return false;
         }
 
-        return !ContainsShellMetacharacters(path);
+        return !PathContainsDangerousChars(path);
     }
 
     // =========================================================================
