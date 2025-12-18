@@ -206,11 +206,24 @@ add_library(RHI STATIC ${RHI_SOURCES} ${RHI_HEADERS})
 target_include_directories(RHI PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(RHI PUBLIC Core Platform ${VULKAN_TARGET} GPUOpen::VulkanMemoryAllocator)
 
+# Renderer library
+set(RENDERER_SOURCES
+    src/Renderer/FrameManager.cpp
+)
+
+set(RENDERER_HEADERS
+    src/Renderer/FrameManager.h
+)
+
+add_library(Renderer STATIC ${RENDERER_SOURCES} ${RENDERER_HEADERS})
+target_include_directories(Renderer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(Renderer PUBLIC RHI)
+
 # =============================================================================
 # Main Application
 # =============================================================================
 add_executable(VulkanRenderer src/main.cpp)
-target_link_libraries(VulkanRenderer PRIVATE RHI Platform Core glm::glm GPUOpen::VulkanMemoryAllocator)
+target_link_libraries(VulkanRenderer PRIVATE Renderer RHI Platform Core glm::glm GPUOpen::VulkanMemoryAllocator)
 
 # =============================================================================
 # Tests
@@ -283,6 +296,11 @@ if(BUILD_TESTS)
     add_executable(TestRHIPipeline tests/TestRHIPipeline.cpp)
     target_link_libraries(TestRHIPipeline PRIVATE RHI Platform Core GTest::gtest_main)
     gtest_discover_tests(TestRHIPipeline)
+
+    # FrameManager test
+    add_executable(TestFrameManager tests/TestFrameManager.cpp)
+    target_link_libraries(TestFrameManager PRIVATE Renderer RHI Platform Core GTest::gtest_main)
+    gtest_discover_tests(TestFrameManager)
 endif()
 
 # =============================================================================
