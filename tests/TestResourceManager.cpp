@@ -312,6 +312,18 @@ TEST_F(ResourceManagerTest, CreateMaterial)
     EXPECT_EQ(rm.GetMaterialCount(), 1u);
 }
 
+TEST_F(ResourceManagerTest, MaterialCaching)
+{
+    auto& rm = Resources::ResourceManager::Instance();
+
+    auto handle1 = rm.CreateMaterial("CachedMaterial");
+    auto handle2 = rm.CreateMaterial("CachedMaterial");
+
+    // Same handle should be returned
+    EXPECT_EQ(handle1, handle2);
+    EXPECT_EQ(rm.GetMaterialCount(), 1u);
+}
+
 TEST_F(ResourceManagerTest, MaterialLookup)
 {
     auto& rm = Resources::ResourceManager::Instance();

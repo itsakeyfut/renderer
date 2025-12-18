@@ -181,6 +181,14 @@ bool ResourceManager::IsModelValid(ModelHandle handle) const
 
 MaterialHandle ResourceManager::CreateMaterial(const std::string& name, const MaterialDesc& desc)
 {
+    // Check if material already exists
+    auto it = m_MaterialLookup.find(name);
+    if (it != m_MaterialLookup.end() && m_MaterialPool.IsValid(it->second)) {
+        m_MaterialPool.AddRef(it->second);
+        LOG_DEBUG("Material already exists: {}", name);
+        return it->second;
+    }
+
     auto material = Core::CreateRef<Material>(name);
 
     // Apply descriptor properties
