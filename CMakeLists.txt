@@ -242,15 +242,23 @@ add_library(RHI STATIC ${RHI_SOURCES} ${RHI_HEADERS})
 target_include_directories(RHI PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(RHI PUBLIC Core Platform ${VULKAN_TARGET} GPUOpen::VulkanMemoryAllocator)
 
-# Resources library (header-only for now)
-set(RESOURCES_HEADERS
-    src/Resources/ResourceHandle.h
+# Resources library
+set(RESOURCES_SOURCES
+    src/Resources/ResourceManager.cpp
 )
 
-add_library(Resources INTERFACE)
-target_sources(Resources INTERFACE ${RESOURCES_HEADERS})
-target_include_directories(Resources INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(Resources INTERFACE Core)
+set(RESOURCES_HEADERS
+    src/Resources/ResourceHandle.h
+    src/Resources/ResourcePool.h
+    src/Resources/ResourceManager.h
+    src/Resources/Texture.h
+    src/Resources/Model.h
+    src/Resources/Material.h
+)
+
+add_library(Resources STATIC ${RESOURCES_SOURCES} ${RESOURCES_HEADERS})
+target_include_directories(Resources PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(Resources PUBLIC Core)
 
 # Scene library (header-only for now)
 set(SCENE_HEADERS
@@ -372,6 +380,11 @@ if(BUILD_TESTS)
     add_executable(TestScene tests/TestScene.cpp)
     target_link_libraries(TestScene PRIVATE Scene Resources Core glm::glm GTest::gtest_main)
     gtest_discover_tests(TestScene)
+
+    # ResourceManager test
+    add_executable(TestResourceManager tests/TestResourceManager.cpp)
+    target_link_libraries(TestResourceManager PRIVATE Resources Core GTest::gtest_main)
+    gtest_discover_tests(TestResourceManager)
 endif()
 
 # =============================================================================
