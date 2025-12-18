@@ -10,7 +10,9 @@
 #include <fstream>
 #include <sstream>
 #include <array>
+#include <cctype>
 #include <cstdlib>
+#include <cstring>
 
 #if defined(_WIN32)
     #include <windows.h>
@@ -18,6 +20,107 @@
 
 namespace RHI
 {
+    // =========================================================================
+    // Input Validation Helpers
+    // =========================================================================
+    // NOTE: These validation functions help mitigate command injection risks.
+    // The shader compilation inputs (EntryPoint, IncludeDirs, Defines, filepath)
+    // are expected to come from trusted sources (developer-controlled config files
+    // or build systems). However, we still validate them as defense-in-depth.
+
+    /**
+     * @brief Check if a string is a valid HLSL/C identifier
+     * @param name The identifier to validate
+     * @return true if valid (alphanumeric + underscore, not starting with digit)
+     */
+    static bool IsValidIdentifier(const std::string& name)
+    {
+        if (name.empty())
+        {
+            return false;
+        }
+
+        // First character must be letter or underscore
+        if (!std::isalpha(static_cast<unsigned char>(name[0])) && name[0] != '_')
+        {
+            return false;
+        }
+
+        // Remaining characters must be alphanumeric or underscore
+        for (size_t i = 1; i < name.size(); ++i)
+        {
+            char c = name[i];
+            if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_')
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @brief Check if a string contains shell metacharacters that could enable injection
+     * @param str The string to check
+     * @return true if the string contains dangerous characters
+     */
+    static bool ContainsShellMetacharacters(const std::string& str)
+    {
+        // Characters that could enable command injection in shell contexts
+        static const char* dangerousChars = ";|&`$<>(){}[]!#~\n\r";
+
+        for (char c : str)
+        {
+            if (std::strchr(dangerousChars, c) != nullptr)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @brief Validate a macro definition string (NAME or NAME=VALUE format)
+     * @param define The define string to validate
+     * @return true if valid
+     */
+    static bool IsValidDefine(const std::string& define)
+    {
+        if (define.empty())
+        {
+            return false;
+        }
+
+        // Check for shell metacharacters
+        if (ContainsShellMetacharacters(define))
+        {
+            return false;
+        }
+
+        // Find the macro name (before '=' if present)
+        size_t eqPos = define.find('=');
+        std::string macroName = (eqPos != std::string::npos) ? define.substr(0, eqPos) : define;
+
+        // Macro name must be a valid identifier
+        return IsValidIdentifier(macroName);
+    }
+
+    /**
+     * @brief Validate a file path for use in command line
+     * @param path The path to validate
+     * @return true if the path is safe to use
+     */
+    static bool IsValidPath(const std::string& path)
+    {
+        if (path.empty())
+        {
+            return false;
+        }
+
+        return !ContainsShellMetacharacters(path);
+    }
+
     // =========================================================================
     // Static Helper Functions
     // =========================================================================
@@ -187,6 +290,37 @@ namespace RHI
         {
             LOG_ERROR("HLSL shader file not found: {}", filepath.string());
             return false;
+        }
+
+        // Validate inputs to prevent command injection
+        if (!IsValidIdentifier(config.EntryPoint))
+        {
+            LOG_ERROR("Invalid entry point name: '{}'. Must be a valid identifier.", config.EntryPoint);
+            return false;
+        }
+
+        if (!IsValidPath(filepath.string()))
+        {
+            LOG_ERROR("Invalid characters in shader path: {}", filepath.string());
+            return false;
+        }
+
+        for (const auto& includeDir : config.IncludeDirs)
+        {
+            if (!IsValidPath(includeDir))
+            {
+                LOG_ERROR("Invalid characters in include directory: {}", includeDir);
+                return false;
+            }
+        }
+
+        for (const auto& define : config.Defines)
+        {
+            if (!IsValidDefine(define))
+            {
+                LOG_ERROR("Invalid macro definition: '{}'. Must be NAME or NAME=VALUE format.", define);
+                return false;
+            }
         }
 
         // Create a temporary output file for SPIR-V
