@@ -25,6 +25,7 @@ namespace RHI
         Uniform,        ///< Uniform buffer (host visible, frequently updated)
         Storage,        ///< Storage buffer (device local or host visible)
         Staging,        ///< Staging buffer for CPU->GPU transfers
+        Indirect,       ///< Indirect draw/dispatch command buffer
         TransferSrc,    ///< Source for transfer operations
         TransferDst     ///< Destination for transfer operations
     };
