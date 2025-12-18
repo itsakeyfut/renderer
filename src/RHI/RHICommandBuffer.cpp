@@ -168,6 +168,70 @@ namespace RHI
         vkCmdBeginRendering(m_CommandBuffer, &renderingInfo);
     }
 
+    void RHICommandBuffer::BeginRendering(const RenderingConfig& config)
+    {
+        ASSERT(m_CommandBuffer != VK_NULL_HANDLE);
+        ASSERT(m_IsRecording);
+
+        // Build color attachment infos
+        std::vector<VkRenderingAttachmentInfo> colorAttachmentInfos;
+        colorAttachmentInfos.reserve(config.ColorAttachments.size());
+
+        for (const auto& attachment : config.ColorAttachments)
+        {
+            VkRenderingAttachmentInfo attachmentInfo{};
+            attachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            attachmentInfo.imageView = attachment.ImageView;
+            attachmentInfo.imageLayout = attachment.Layout;
+            attachmentInfo.loadOp = attachment.LoadOp;
+            attachmentInfo.storeOp = attachment.StoreOp;
+            attachmentInfo.clearValue.color = attachment.ClearValue;
+            attachmentInfo.resolveMode = attachment.ResolveMode;
+            attachmentInfo.resolveImageView = attachment.ResolveImageView;
+            attachmentInfo.resolveImageLayout = attachment.ResolveImageLayout;
+
+            colorAttachmentInfos.push_back(attachmentInfo);
+        }
+
+        // Build depth attachment info
+        VkRenderingAttachmentInfo depthAttachmentInfo{};
+        depthAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+        depthAttachmentInfo.imageView = config.Depth.ImageView;
+        depthAttachmentInfo.imageLayout = config.Depth.Layout;
+        depthAttachmentInfo.loadOp = config.Depth.LoadOp;
+        depthAttachmentInfo.storeOp = config.Depth.StoreOp;
+        depthAttachmentInfo.clearValue.depthStencil = config.Depth.ClearValue;
+        depthAttachmentInfo.resolveMode = config.Depth.ResolveMode;
+        depthAttachmentInfo.resolveImageView = config.Depth.ResolveImageView;
+        depthAttachmentInfo.resolveImageLayout = config.Depth.ResolveImageLayout;
+
+        // Build stencil attachment info
+        VkRenderingAttachmentInfo stencilAttachmentInfo{};
+        stencilAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+        stencilAttachmentInfo.imageView = config.Stencil.ImageView;
+        stencilAttachmentInfo.imageLayout = config.Stencil.Layout;
+        stencilAttachmentInfo.loadOp = config.Stencil.LoadOp;
+        stencilAttachmentInfo.storeOp = config.Stencil.StoreOp;
+        stencilAttachmentInfo.clearValue.depthStencil = config.Stencil.ClearValue;
+        stencilAttachmentInfo.resolveMode = config.Stencil.ResolveMode;
+        stencilAttachmentInfo.resolveImageView = config.Stencil.ResolveImageView;
+        stencilAttachmentInfo.resolveImageLayout = config.Stencil.ResolveImageLayout;
+
+        // Build rendering info
+        VkRenderingInfo renderingInfo{};
+        renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+        renderingInfo.flags = config.Flags;
+        renderingInfo.renderArea = config.RenderArea;
+        renderingInfo.layerCount = config.LayerCount;
+        renderingInfo.viewMask = config.ViewMask;
+        renderingInfo.colorAttachmentCount = static_cast<uint32_t>(colorAttachmentInfos.size());
+        renderingInfo.pColorAttachments = colorAttachmentInfos.empty() ? nullptr : colorAttachmentInfos.data();
+        renderingInfo.pDepthAttachment = (config.Depth.ImageView != VK_NULL_HANDLE) ? &depthAttachmentInfo : nullptr;
+        renderingInfo.pStencilAttachment = (config.Stencil.ImageView != VK_NULL_HANDLE) ? &stencilAttachmentInfo : nullptr;
+
+        vkCmdBeginRendering(m_CommandBuffer, &renderingInfo);
+    }
+
     void RHICommandBuffer::EndRendering()
     {
         ASSERT(m_CommandBuffer != VK_NULL_HANDLE);

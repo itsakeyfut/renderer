@@ -573,3 +573,251 @@ TEST_F(RHICommandBufferTest, CommandPoolDestroyedWithCommandBuffers) {
     // Pool destruction should not crash
     EXPECT_NO_THROW(pool.reset());
 }
+
+// =============================================================================
+// Dynamic Rendering (Vulkan 1.3) Tests
+// =============================================================================
+
+TEST_F(RHICommandBufferTest, RenderingConfigHasCorrectDefaults) {
+    // Test ColorAttachment defaults
+    RHI::ColorAttachment colorAttachment;
+    EXPECT_EQ(colorAttachment.ImageView, VK_NULL_HANDLE);
+    EXPECT_EQ(colorAttachment.Layout, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    EXPECT_EQ(colorAttachment.LoadOp, VK_ATTACHMENT_LOAD_OP_CLEAR);
+    EXPECT_EQ(colorAttachment.StoreOp, VK_ATTACHMENT_STORE_OP_STORE);
+    EXPECT_EQ(colorAttachment.ResolveMode, VK_RESOLVE_MODE_NONE);
+
+    // Test DepthAttachment defaults
+    RHI::DepthAttachment depthAttachment;
+    EXPECT_EQ(depthAttachment.ImageView, VK_NULL_HANDLE);
+    EXPECT_EQ(depthAttachment.Layout, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+    EXPECT_EQ(depthAttachment.LoadOp, VK_ATTACHMENT_LOAD_OP_CLEAR);
+    EXPECT_EQ(depthAttachment.StoreOp, VK_ATTACHMENT_STORE_OP_DONT_CARE);
+    EXPECT_FLOAT_EQ(depthAttachment.ClearValue.depth, 1.0f);
+    EXPECT_EQ(depthAttachment.ClearValue.stencil, 0);
+
+    // Test StencilAttachment defaults
+    RHI::StencilAttachment stencilAttachment;
+    EXPECT_EQ(stencilAttachment.ImageView, VK_NULL_HANDLE);
+    EXPECT_EQ(stencilAttachment.LoadOp, VK_ATTACHMENT_LOAD_OP_DONT_CARE);
+    EXPECT_EQ(stencilAttachment.StoreOp, VK_ATTACHMENT_STORE_OP_DONT_CARE);
+
+    // Test RenderingConfig defaults
+    RHI::RenderingConfig config;
+    EXPECT_TRUE(config.ColorAttachments.empty());
+    EXPECT_EQ(config.Depth.ImageView, VK_NULL_HANDLE);
+    EXPECT_EQ(config.Stencil.ImageView, VK_NULL_HANDLE);
+    EXPECT_EQ(config.RenderArea.offset.x, 0);
+    EXPECT_EQ(config.RenderArea.offset.y, 0);
+    EXPECT_EQ(config.RenderArea.extent.width, 0u);
+    EXPECT_EQ(config.RenderArea.extent.height, 0u);
+    EXPECT_EQ(config.LayerCount, 1u);
+    EXPECT_EQ(config.ViewMask, 0u);
+    EXPECT_EQ(config.Flags, 0u);
+}
+
+TEST_F(RHICommandBufferTest, BeginRenderingWithEmptyConfig) {
+    ASSERT_NE(m_Device, nullptr);
+
+    m_CommandPool = RHI::RHICommandPool::Create(m_Device);
+    ASSERT_NE(m_CommandPool, nullptr);
+
+    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
+    ASSERT_NE(m_CommandBuffer, nullptr);
+
+    m_CommandBuffer->Begin();
+
+    // Empty config (no attachments) - should work but render nothing
+    RHI::RenderingConfig config;
+    config.RenderArea = {{0, 0}, {100, 100}};
+
+    EXPECT_NO_THROW(m_CommandBuffer->BeginRendering(config));
+    EXPECT_NO_THROW(m_CommandBuffer->EndRendering());
+
+    m_CommandBuffer->End();
+}
+
+TEST_F(RHICommandBufferTest, BeginRenderingWithColorAttachmentConfig) {
+    ASSERT_NE(m_Device, nullptr);
+
+    m_CommandPool = RHI::RHICommandPool::Create(m_Device);
+    ASSERT_NE(m_CommandPool, nullptr);
+
+    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
+    ASSERT_NE(m_CommandBuffer, nullptr);
+
+    m_CommandBuffer->Begin();
+
+    // Config with null image view (for testing API, not actual rendering)
+    RHI::RenderingConfig config;
+    config.RenderArea = {{0, 0}, {800, 600}};
+
+    RHI::ColorAttachment colorAttachment;
+    colorAttachment.ImageView = VK_NULL_HANDLE;  // Null for API test
+    colorAttachment.ClearValue = {{0.2f, 0.3f, 0.4f, 1.0f}};
+    config.ColorAttachments.push_back(colorAttachment);
+
+    EXPECT_NO_THROW(m_CommandBuffer->BeginRendering(config));
+    EXPECT_NO_THROW(m_CommandBuffer->EndRendering());
+
+    m_CommandBuffer->End();
+}
+
+TEST_F(RHICommandBufferTest, BeginRenderingWithMultipleColorAttachments) {
+    ASSERT_NE(m_Device, nullptr);
+
+    m_CommandPool = RHI::RHICommandPool::Create(m_Device);
+    ASSERT_NE(m_CommandPool, nullptr);
+
+    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
+    ASSERT_NE(m_CommandBuffer, nullptr);
+
+    m_CommandBuffer->Begin();
+
+    // Config with multiple color attachments (MRT)
+    RHI::RenderingConfig config;
+    config.RenderArea = {{0, 0}, {1920, 1080}};
+    config.LayerCount = 1;
+
+    // Add multiple color attachments for MRT
+    for (int i = 0; i < 4; ++i) {
+        RHI::ColorAttachment colorAttachment;
+        colorAttachment.ImageView = VK_NULL_HANDLE;
+        colorAttachment.LoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        colorAttachment.StoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+        config.ColorAttachments.push_back(colorAttachment);
+    }
+
+    EXPECT_EQ(config.ColorAttachments.size(), 4u);
+
+    EXPECT_NO_THROW(m_CommandBuffer->BeginRendering(config));
+    EXPECT_NO_THROW(m_CommandBuffer->EndRendering());
+
+    m_CommandBuffer->End();
+}
+
+TEST_F(RHICommandBufferTest, BeginRenderingWithDepthAttachmentConfig) {
+    ASSERT_NE(m_Device, nullptr);
+
+    m_CommandPool = RHI::RHICommandPool::Create(m_Device);
+    ASSERT_NE(m_CommandPool, nullptr);
+
+    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
+    ASSERT_NE(m_CommandBuffer, nullptr);
+
+    m_CommandBuffer->Begin();
+
+    // Config with depth attachment only
+    RHI::RenderingConfig config;
+    config.RenderArea = {{0, 0}, {800, 600}};
+
+    // Note: ImageView is VK_NULL_HANDLE so depth won't actually be used
+    // This tests the API path, not actual rendering
+    config.Depth.LoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    config.Depth.StoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+    config.Depth.ClearValue = {1.0f, 0};
+
+    EXPECT_NO_THROW(m_CommandBuffer->BeginRendering(config));
+    EXPECT_NO_THROW(m_CommandBuffer->EndRendering());
+
+    m_CommandBuffer->End();
+}
+
+TEST_F(RHICommandBufferTest, BeginRenderingWithFullConfig) {
+    ASSERT_NE(m_Device, nullptr);
+
+    m_CommandPool = RHI::RHICommandPool::Create(m_Device);
+    ASSERT_NE(m_CommandPool, nullptr);
+
+    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
+    ASSERT_NE(m_CommandBuffer, nullptr);
+
+    m_CommandBuffer->Begin();
+
+    // Full config with color, depth, and stencil
+    RHI::RenderingConfig config;
+    config.RenderArea = {{0, 0}, {1280, 720}};
+    config.LayerCount = 1;
+    config.ViewMask = 0;
+    config.Flags = 0;
+
+    // Add color attachment
+    RHI::ColorAttachment colorAttachment;
+    colorAttachment.Layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    colorAttachment.LoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachment.StoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachment.ClearValue = {{0.1f, 0.1f, 0.1f, 1.0f}};
+    config.ColorAttachments.push_back(colorAttachment);
+
+    // Configure depth
+    config.Depth.Layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    config.Depth.LoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    config.Depth.StoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    config.Depth.ClearValue = {1.0f, 0};
+
+    // Configure stencil
+    config.Stencil.Layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    config.Stencil.LoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    config.Stencil.StoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    config.Stencil.ClearValue = {0.0f, 0};
+
+    EXPECT_NO_THROW(m_CommandBuffer->BeginRendering(config));
+    EXPECT_NO_THROW(m_CommandBuffer->EndRendering());
+
+    m_CommandBuffer->End();
+}
+
+TEST_F(RHICommandBufferTest, BeginRenderingWithLoadOpLoad) {
+    ASSERT_NE(m_Device, nullptr);
+
+    m_CommandPool = RHI::RHICommandPool::Create(m_Device);
+    ASSERT_NE(m_CommandPool, nullptr);
+
+    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
+    ASSERT_NE(m_CommandBuffer, nullptr);
+
+    m_CommandBuffer->Begin();
+
+    // Config with LOAD_OP_LOAD (preserve previous contents)
+    RHI::RenderingConfig config;
+    config.RenderArea = {{0, 0}, {800, 600}};
+
+    RHI::ColorAttachment colorAttachment;
+    colorAttachment.LoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+    colorAttachment.StoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+    config.ColorAttachments.push_back(colorAttachment);
+
+    config.Depth.LoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+    config.Depth.StoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+
+    EXPECT_NO_THROW(m_CommandBuffer->BeginRendering(config));
+    EXPECT_NO_THROW(m_CommandBuffer->EndRendering());
+
+    m_CommandBuffer->End();
+}
+
+TEST_F(RHICommandBufferTest, BeginRenderingWithDontCareOps) {
+    ASSERT_NE(m_Device, nullptr);
+
+    m_CommandPool = RHI::RHICommandPool::Create(m_Device);
+    ASSERT_NE(m_CommandPool, nullptr);
+
+    m_CommandBuffer = RHI::RHICommandBuffer::Create(m_Device, m_CommandPool);
+    ASSERT_NE(m_CommandBuffer, nullptr);
+
+    m_CommandBuffer->Begin();
+
+    // Config with DONT_CARE operations (for transient usage)
+    RHI::RenderingConfig config;
+    config.RenderArea = {{0, 0}, {800, 600}};
+
+    RHI::ColorAttachment colorAttachment;
+    colorAttachment.LoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachment.StoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    config.ColorAttachments.push_back(colorAttachment);
+
+    EXPECT_NO_THROW(m_CommandBuffer->BeginRendering(config));
+    EXPECT_NO_THROW(m_CommandBuffer->EndRendering());
+
+    m_CommandBuffer->End();
+}

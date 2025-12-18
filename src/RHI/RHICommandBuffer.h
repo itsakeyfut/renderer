@@ -20,6 +20,208 @@ namespace RHI
     class RHIDevice;
 
     /**
+     * @brief Color attachment configuration for dynamic rendering
+     *
+     * Defines how a color attachment is used during a render pass.
+     */
+    struct ColorAttachment
+    {
+        /**
+         * @brief Image view to render to
+         */
+        VkImageView ImageView = VK_NULL_HANDLE;
+
+        /**
+         * @brief Layout of the image during rendering
+         */
+        VkImageLayout Layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+        /**
+         * @brief Load operation (clear, load, or don't care)
+         */
+        VkAttachmentLoadOp LoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+
+        /**
+         * @brief Store operation (store or don't care)
+         */
+        VkAttachmentStoreOp StoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+
+        /**
+         * @brief Clear color value (used when LoadOp is CLEAR)
+         */
+        VkClearColorValue ClearValue = {{0.0f, 0.0f, 0.0f, 1.0f}};
+
+        /**
+         * @brief Resolve image view for multisampling (VK_NULL_HANDLE if not used)
+         */
+        VkImageView ResolveImageView = VK_NULL_HANDLE;
+
+        /**
+         * @brief Resolve image layout (used when ResolveImageView is set)
+         */
+        VkImageLayout ResolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+        /**
+         * @brief Resolve mode for multisampling
+         */
+        VkResolveModeFlagBits ResolveMode = VK_RESOLVE_MODE_NONE;
+    };
+
+    /**
+     * @brief Depth attachment configuration for dynamic rendering
+     *
+     * Defines how the depth attachment is used during a render pass.
+     */
+    struct DepthAttachment
+    {
+        /**
+         * @brief Image view for depth testing (VK_NULL_HANDLE if not used)
+         */
+        VkImageView ImageView = VK_NULL_HANDLE;
+
+        /**
+         * @brief Layout of the image during rendering
+         */
+        VkImageLayout Layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        /**
+         * @brief Load operation (clear, load, or don't care)
+         */
+        VkAttachmentLoadOp LoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+
+        /**
+         * @brief Store operation (store or don't care)
+         */
+        VkAttachmentStoreOp StoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+
+        /**
+         * @brief Clear depth/stencil value (used when LoadOp is CLEAR)
+         */
+        VkClearDepthStencilValue ClearValue = {1.0f, 0};
+
+        /**
+         * @brief Resolve image view for multisampling (VK_NULL_HANDLE if not used)
+         */
+        VkImageView ResolveImageView = VK_NULL_HANDLE;
+
+        /**
+         * @brief Resolve image layout (used when ResolveImageView is set)
+         */
+        VkImageLayout ResolveImageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        /**
+         * @brief Resolve mode for multisampling
+         */
+        VkResolveModeFlagBits ResolveMode = VK_RESOLVE_MODE_NONE;
+    };
+
+    /**
+     * @brief Stencil attachment configuration for dynamic rendering
+     *
+     * Defines how the stencil attachment is used during a render pass.
+     * Often shares the same image as depth when using combined depth/stencil formats.
+     */
+    struct StencilAttachment
+    {
+        /**
+         * @brief Image view for stencil testing (VK_NULL_HANDLE if not used)
+         */
+        VkImageView ImageView = VK_NULL_HANDLE;
+
+        /**
+         * @brief Layout of the image during rendering
+         */
+        VkImageLayout Layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        /**
+         * @brief Load operation (clear, load, or don't care)
+         */
+        VkAttachmentLoadOp LoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+
+        /**
+         * @brief Store operation (store or don't care)
+         */
+        VkAttachmentStoreOp StoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+
+        /**
+         * @brief Clear depth/stencil value (used when LoadOp is CLEAR)
+         */
+        VkClearDepthStencilValue ClearValue = {1.0f, 0};
+
+        /**
+         * @brief Resolve image view for multisampling (VK_NULL_HANDLE if not used)
+         */
+        VkImageView ResolveImageView = VK_NULL_HANDLE;
+
+        /**
+         * @brief Resolve image layout (used when ResolveImageView is set)
+         */
+        VkImageLayout ResolveImageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        /**
+         * @brief Resolve mode for multisampling
+         */
+        VkResolveModeFlagBits ResolveMode = VK_RESOLVE_MODE_NONE;
+    };
+
+    /**
+     * @brief Configuration for dynamic rendering (Vulkan 1.3)
+     *
+     * Provides a high-level abstraction over VkRenderingInfo for easier
+     * setup of dynamic rendering. Supports multiple color attachments (MRT)
+     * and optional depth/stencil attachments.
+     *
+     * Usage:
+     * @code
+     * RenderingConfig config;
+     * config.RenderArea = {{0, 0}, {width, height}};
+     * config.ColorAttachments.push_back({swapchainImageView});
+     * config.DepthAttachment.ImageView = depthImageView;
+     *
+     * commandBuffer->BeginRendering(config);
+     * // ... draw commands ...
+     * commandBuffer->EndRendering();
+     * @endcode
+     */
+    struct RenderingConfig
+    {
+        /**
+         * @brief Color attachments for rendering (supports MRT)
+         */
+        std::vector<ColorAttachment> ColorAttachments;
+
+        /**
+         * @brief Depth attachment configuration
+         */
+        DepthAttachment Depth;
+
+        /**
+         * @brief Stencil attachment configuration
+         */
+        StencilAttachment Stencil;
+
+        /**
+         * @brief Render area (viewport region to render)
+         */
+        VkRect2D RenderArea = {{0, 0}, {0, 0}};
+
+        /**
+         * @brief Number of layers for layered rendering
+         */
+        uint32_t LayerCount = 1;
+
+        /**
+         * @brief View mask for multiview rendering (0 disables multiview)
+         */
+        uint32_t ViewMask = 0;
+
+        /**
+         * @brief Rendering flags (e.g., VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT)
+         */
+        VkRenderingFlags Flags = 0;
+    };
+
+    /**
      * @brief Vulkan Command Buffer wrapper class
      *
      * Provides a high-level interface for recording GPU commands.
@@ -141,10 +343,20 @@ namespace RHI
         // ============================================================
 
         /**
-         * @brief Begin dynamic rendering
+         * @brief Begin dynamic rendering with raw VkRenderingInfo
          * @param renderingInfo Rendering info structure
          */
         void BeginRendering(const VkRenderingInfo& renderingInfo);
+
+        /**
+         * @brief Begin dynamic rendering with high-level configuration
+         *
+         * Converts the RenderingConfig to VkRenderingInfo and starts rendering.
+         * This is the recommended API for most use cases.
+         *
+         * @param config Rendering configuration
+         */
+        void BeginRendering(const RenderingConfig& config);
 
         /**
          * @brief End dynamic rendering
