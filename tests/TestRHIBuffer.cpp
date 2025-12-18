@@ -14,6 +14,7 @@
 #include "RHI/RHIPhysicalDevice.h"
 #include "RHI/RHIInstance.h"
 #include "Platform/Window.h"
+#include "Core/Assert.h"
 #include "Core/Log.h"
 
 #include <vector>
@@ -535,8 +536,13 @@ TEST_F(RHIBufferTest, CreateWithZeroSizeFails) {
     desc.Usage = RHI::BufferUsage::Vertex;
     desc.Memory = RHI::MemoryUsage::GpuOnly;
 
-    // Should fail or assert due to zero size
-    // Note: Behavior depends on ASSERT macro implementation
+#if RENDERER_DEBUG
+    // In debug builds, ASSERT(desc.Size > 0) will abort the process
+    EXPECT_DEATH(RHI::RHIBuffer::Create(m_Device, desc), "");
+#else
+    // In release builds, assertion is removed - skip test
+    GTEST_SKIP() << "Assertion not active in release builds";
+#endif
 }
 
 // =============================================================================
