@@ -152,6 +152,11 @@ namespace Platform
         glfwPollEvents();
     }
 
+    void Window::WaitEvents() const
+    {
+        glfwWaitEvents();
+    }
+
     void Window::GetFramebufferSize(uint32_t& outWidth, uint32_t& outHeight) const
     {
         int width = 0;

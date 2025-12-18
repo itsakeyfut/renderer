@@ -15,6 +15,7 @@
 
 #include <array>
 #include <cstdint>
+#include <vector>
 
 namespace RHI
 {
@@ -59,14 +60,6 @@ namespace Renderer
          * for rendering. Queue submission waits on this semaphore.
          */
         Core::Ref<RHI::RHISemaphore> ImageAvailableSemaphore;
-
-        /**
-         * @brief Semaphore signaled when rendering is complete
-         *
-         * Signaled by queue submission when rendering is done.
-         * Present waits on this semaphore before displaying.
-         */
-        Core::Ref<RHI::RHISemaphore> RenderFinishedSemaphore;
 
         /**
          * @brief Fence for CPU-GPU synchronization
@@ -192,6 +185,27 @@ namespace Renderer
          */
         void NextFrame();
 
+        /**
+         * @brief Reset the current frame's fence without waiting
+         *
+         * Used after swapchain recreation when the fence might be signaled
+         * but we want to skip the wait. Resets the fence to unsignaled state.
+         */
+        void ResetCurrentFence();
+
+        /**
+         * @brief Reset all synchronization primitives for swapchain recreation
+         *
+         * Used after device->WaitIdle() to ensure all fences and semaphores
+         * are in a clean state. This prevents deadlocks and validation errors
+         * from primitives that were signaled but never consumed due to
+         * swapchain recreation.
+         *
+         * @param device The logical device for recreation
+         * @return true on success, false on failure
+         */
+        bool ResetSyncPrimitives(const Core::Ref<RHI::RHIDevice>& device);
+
         // ============================================================
         // Convenience Accessors
         // ============================================================
@@ -212,10 +226,16 @@ namespace Renderer
         VkSemaphore GetImageAvailableSemaphore() const;
 
         /**
-         * @brief Get the current frame's render finished semaphore handle
+         * @brief Get the render finished semaphore for a specific swapchain image
+         *
+         * Render finished semaphores are indexed by swapchain image index (not frame index)
+         * to avoid semaphore reuse conflicts when the acquired image index differs from
+         * the frame-in-flight index.
+         *
+         * @param imageIndex Swapchain image index from AcquireNextImage
          * @return VkSemaphore handle
          */
-        VkSemaphore GetRenderFinishedSemaphore() const;
+        VkSemaphore GetRenderFinishedSemaphore(uint32_t imageIndex) const;
 
         /**
          * @brief Get the current frame's in-flight fence handle
@@ -247,6 +267,33 @@ namespace Renderer
          */
         static constexpr uint32_t GetFrameCount() { return MAX_FRAMES_IN_FLIGHT; }
 
+        // ============================================================
+        // Swapchain Image Semaphore Management
+        // ============================================================
+
+        /**
+         * @brief Create render finished semaphores for swapchain images
+         *
+         * Must be called after swapchain creation/recreation to allocate
+         * the correct number of semaphores matching the swapchain image count.
+         *
+         * @param device The logical device
+         * @param imageCount Number of swapchain images
+         * @return true on success, false on failure
+         */
+        bool CreateRenderFinishedSemaphores(
+            const Core::Ref<RHI::RHIDevice>& device,
+            uint32_t imageCount);
+
+        /**
+         * @brief Get the number of render finished semaphores
+         * @return Current count of render finished semaphores
+         */
+        uint32_t GetRenderFinishedSemaphoreCount() const
+        {
+            return static_cast<uint32_t>(m_RenderFinishedSemaphores.size());
+        }
+
     private:
         /**
          * @brief Private constructor - use Create() factory method
@@ -270,9 +317,19 @@ namespace Renderer
             const Core::Ref<RHI::RHIDevice>& device,
             FrameData& frameData);
 
+        Core::Ref<RHI::RHIDevice> m_Device;  ///< Device reference for semaphore creation
         Core::Ref<RHI::RHICommandPool> m_CommandPool;  ///< Shared command pool for all frames
         std::array<FrameData, MAX_FRAMES_IN_FLIGHT> m_Frames;
         uint32_t m_CurrentFrame = 0;
+
+        /**
+         * @brief Render finished semaphores indexed by swapchain image
+         *
+         * These semaphores are separate from per-frame resources because
+         * the swapchain can return images in any order. Using image-indexed
+         * semaphores prevents reuse conflicts when presenting.
+         */
+        std::vector<Core::Ref<RHI::RHISemaphore>> m_RenderFinishedSemaphores;
     };
 
 } // namespace Renderer

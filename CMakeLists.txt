@@ -177,6 +177,7 @@ target_link_libraries(Platform PUBLIC Core glfw ${VULKAN_TARGET})
 
 # RHI library
 set(RHI_SOURCES
+    src/RHI/RHIBuffer.cpp
     src/RHI/RHICommandBuffer.cpp
     src/RHI/RHICommandPool.cpp
     src/RHI/RHIDevice.cpp
@@ -190,6 +191,7 @@ set(RHI_SOURCES
 )
 
 set(RHI_HEADERS
+    src/RHI/RHIBuffer.h
     src/RHI/RHICommandBuffer.h
     src/RHI/RHICommandPool.h
     src/RHI/RHIDevice.h
