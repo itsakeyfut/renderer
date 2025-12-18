@@ -213,6 +213,9 @@ set(RHI_SOURCES
     src/RHI/RHICommandBuffer.cpp
     src/RHI/RHICommandPool.cpp
     src/RHI/RHIDeletionQueue.cpp
+    src/RHI/RHIDescriptorPool.cpp
+    src/RHI/RHIDescriptorSet.cpp
+    src/RHI/RHIDescriptorSetLayout.cpp
     src/RHI/RHIDevice.cpp
     src/RHI/RHIFence.cpp
     src/RHI/RHIInstance.cpp
@@ -228,6 +231,9 @@ set(RHI_HEADERS
     src/RHI/RHICommandBuffer.h
     src/RHI/RHICommandPool.h
     src/RHI/RHIDeletionQueue.h
+    src/RHI/RHIDescriptorPool.h
+    src/RHI/RHIDescriptorSet.h
+    src/RHI/RHIDescriptorSetLayout.h
     src/RHI/RHIDevice.h
     src/RHI/RHIFence.h
     src/RHI/RHIInstance.h
@@ -254,6 +260,7 @@ set(RESOURCES_HEADERS
     src/Resources/Texture.h
     src/Resources/Model.h
     src/Resources/Material.h
+    src/Resources/UniformBufferObjects.h
     src/Resources/Vertex.h
 )
 
@@ -396,6 +403,11 @@ if(BUILD_TESTS)
     add_executable(TestVertex tests/TestVertex.cpp)
     target_link_libraries(TestVertex PRIVATE Resources Core GTest::gtest_main)
     gtest_discover_tests(TestVertex)
+
+    # RHI Descriptor test
+    add_executable(TestRHIDescriptor tests/TestRHIDescriptor.cpp)
+    target_link_libraries(TestRHIDescriptor PRIVATE RHI Resources Platform Core GTest::gtest_main)
+    gtest_discover_tests(TestRHIDescriptor)
 endif()
 
 # =============================================================================
