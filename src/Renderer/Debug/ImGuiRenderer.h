@@ -209,13 +209,6 @@ namespace Renderer
          */
         bool CreateDescriptorPool(VkDevice device);
 
-        /**
-         * @brief Upload ImGui font textures to GPU
-         * @param device The RHI device
-         * @return true on success
-         */
-        bool UploadFonts(const Core::Ref<RHI::RHIDevice>& device);
-
         VkDevice m_Device = VK_NULL_HANDLE;
         VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
         bool m_Initialized = false;

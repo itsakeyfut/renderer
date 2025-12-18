@@ -102,6 +102,7 @@ namespace Renderer
 
         // Setup Vulkan init info for dynamic rendering (Vulkan 1.3)
         ImGui_ImplVulkan_InitInfo initInfo{};
+        initInfo.ApiVersion = VK_API_VERSION_1_3;
         initInfo.Instance = config.Instance;
         initInfo.PhysicalDevice = device->GetPhysicalDevice();
         initInfo.Device = m_Device;
@@ -109,11 +110,8 @@ namespace Renderer
         initInfo.Queue = config.GraphicsQueue;
         initInfo.PipelineCache = VK_NULL_HANDLE;
         initInfo.DescriptorPool = m_DescriptorPool;
-        initInfo.RenderPass = VK_NULL_HANDLE;  // Not using render pass, using dynamic rendering
-        initInfo.Subpass = 0;
         initInfo.MinImageCount = config.ImageCount;
         initInfo.ImageCount = config.ImageCount;
-        initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
         initInfo.Allocator = nullptr;
         initInfo.CheckVkResultFn = [](VkResult result) {
             if (result != VK_SUCCESS)
@@ -124,9 +122,12 @@ namespace Renderer
 
         // Use dynamic rendering (no render pass) - requires Vulkan 1.3
         initInfo.UseDynamicRendering = true;
-        initInfo.PipelineRenderingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
-        initInfo.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
-        initInfo.PipelineRenderingCreateInfo.pColorAttachmentFormats = &config.ColorFormat;
+        initInfo.PipelineInfoMain.RenderPass = VK_NULL_HANDLE;
+        initInfo.PipelineInfoMain.Subpass = 0;
+        initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+        initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
+        initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
+        initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = &config.ColorFormat;
 
         if (!ImGui_ImplVulkan_Init(&initInfo))
         {
@@ -135,14 +136,6 @@ namespace Renderer
             return false;
         }
 
-        // Upload fonts
-        if (!UploadFonts(device))
-        {
-            LOG_ERROR("Failed to upload ImGui fonts");
-            ImGui_ImplVulkan_Shutdown();
-            ImGui_ImplGlfw_Shutdown();
-            return false;
-        }
 
         m_Initialized = true;
         LOG_INFO("ImGui renderer initialized");
@@ -178,18 +171,6 @@ namespace Renderer
         if (result != VK_SUCCESS)
         {
             LOG_ERROR("Failed to create ImGui descriptor pool: {}", static_cast<int>(result));
-            return false;
-        }
-
-        return true;
-    }
-
-    bool ImGuiRenderer::UploadFonts([[maybe_unused]] const Core::Ref<RHI::RHIDevice>& device)
-    {
-        // Create fonts texture (ImGui handles command buffer internally in v1.91+)
-        if (!ImGui_ImplVulkan_CreateFontsTexture())
-        {
-            LOG_ERROR("Failed to create ImGui fonts texture");
             return false;
         }
 
