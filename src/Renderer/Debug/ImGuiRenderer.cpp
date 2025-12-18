@@ -128,7 +128,7 @@ namespace Renderer
         initInfo.PipelineInfoMain.RenderPass = VK_NULL_HANDLE;
         initInfo.PipelineInfoMain.Subpass = 0;
         initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-        initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
+        initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
         initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
         initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = &config.ColorFormat;
 
