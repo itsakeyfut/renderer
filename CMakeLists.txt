@@ -182,6 +182,7 @@ set(RHI_SOURCES
     src/RHI/RHIDevice.cpp
     src/RHI/RHIInstance.cpp
     src/RHI/RHIPhysicalDevice.cpp
+    src/RHI/RHIPipeline.cpp
     src/RHI/RHIShader.cpp
     src/RHI/RHISwapchain.cpp
 )
@@ -192,6 +193,7 @@ set(RHI_HEADERS
     src/RHI/RHIDevice.h
     src/RHI/RHIInstance.h
     src/RHI/RHIPhysicalDevice.h
+    src/RHI/RHIPipeline.h
     src/RHI/RHIShader.h
     src/RHI/RHISwapchain.h
 )
@@ -272,6 +274,11 @@ if(BUILD_TESTS)
     add_executable(TestRHIShader tests/TestRHIShader.cpp)
     target_link_libraries(TestRHIShader PRIVATE RHI Platform Core GTest::gtest_main)
     gtest_discover_tests(TestRHIShader)
+
+    # RHI Pipeline test
+    add_executable(TestRHIPipeline tests/TestRHIPipeline.cpp)
+    target_link_libraries(TestRHIPipeline PRIVATE RHI Platform Core GTest::gtest_main)
+    gtest_discover_tests(TestRHIPipeline)
 endif()
 
 # =============================================================================
