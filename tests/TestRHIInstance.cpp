@@ -31,6 +31,7 @@ protected:
         windowConfig.Width = 100;
         windowConfig.Height = 100;
         windowConfig.Title = "RHI Test Window";
+        windowConfig.Visible = false;  // Hide window during tests
         m_Window = std::make_unique<Platform::Window>(windowConfig);
     }
 

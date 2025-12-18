@@ -33,6 +33,7 @@ protected:
 
 TEST_F(WindowTest, CreatesWindowWithDefaultConfig) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
 
     EXPECT_NE(window.GetHandle(), nullptr);
@@ -45,6 +46,7 @@ TEST_F(WindowTest, CreatesWindowWithCustomDimensions) {
     config.Width = 800;
     config.Height = 600;
     config.Title = "Test Window";
+    config.Visible = false;  // Hide window during tests
 
     Platform::Window window(config);
 
@@ -55,6 +57,7 @@ TEST_F(WindowTest, CreatesWindowWithCustomDimensions) {
 
 TEST_F(WindowTest, ShouldCloseReturnsFalseInitially) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
 
     EXPECT_FALSE(window.ShouldClose());
@@ -64,6 +67,7 @@ TEST_F(WindowTest, GetFramebufferSizeReturnsValidDimensions) {
     Platform::WindowConfig config;
     config.Width = 640;
     config.Height = 480;
+    config.Visible = false;  // Hide window during tests
 
     Platform::Window window(config);
 
@@ -79,6 +83,7 @@ TEST_F(WindowTest, GetFramebufferSizeReturnsValidDimensions) {
 
 TEST_F(WindowTest, WasResizedReturnsFalseInitially) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
 
     EXPECT_FALSE(window.WasResized());
@@ -86,6 +91,7 @@ TEST_F(WindowTest, WasResizedReturnsFalseInitially) {
 
 TEST_F(WindowTest, ResetResizedFlagWorks) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
 
     // Initially not resized
@@ -104,6 +110,7 @@ TEST_F(WindowTest, MoveConstructorTransfersOwnership) {
     Platform::WindowConfig config;
     config.Width = 320;
     config.Height = 240;
+    config.Visible = false;  // Hide window during tests
 
     Platform::Window original(config);
     GLFWwindow* originalHandle = original.GetHandle();
@@ -124,10 +131,12 @@ TEST_F(WindowTest, MoveAssignmentTransfersOwnership) {
     Platform::WindowConfig config1;
     config1.Width = 400;
     config1.Height = 300;
+    config1.Visible = false;  // Hide window during tests
 
     Platform::WindowConfig config2;
     config2.Width = 200;
     config2.Height = 150;
+    config2.Visible = false;  // Hide window during tests
 
     Platform::Window window1(config1);
     Platform::Window window2(config2);
@@ -153,6 +162,7 @@ TEST_F(WindowTest, GetRequiredVulkanExtensionsReturnsNonNull) {
     // GLFW must be initialized before calling GetRequiredVulkanExtensions
     // Creating a window initializes GLFW
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
 
     uint32_t count = 0;
@@ -166,6 +176,7 @@ TEST_F(WindowTest, GetRequiredVulkanExtensionsReturnsNonNull) {
 TEST_F(WindowTest, VulkanExtensionsAreValidStrings) {
     // GLFW must be initialized before calling GetRequiredVulkanExtensions
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
 
     uint32_t count = 0;
@@ -184,6 +195,7 @@ TEST_F(WindowTest, VulkanExtensionsAreValidStrings) {
 
 TEST_F(WindowTest, SetTitleDoesNotCrash) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
 
     // Setting title should not crash
@@ -200,6 +212,7 @@ TEST_F(WindowTest, SetTitleDoesNotCrash) {
 
 TEST_F(WindowTest, ResizeCallbackCanBeSet) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
 
     bool callbackInvoked = false;
@@ -218,6 +231,7 @@ TEST_F(WindowTest, ResizeCallbackCanBeSet) {
 
 TEST_F(WindowTest, PollEventsDoesNotCrash) {
     Platform::WindowConfig config;
+    config.Visible = false;  // Hide window during tests
     Platform::Window window(config);
 
     // Polling events should not crash
