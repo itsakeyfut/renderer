@@ -301,6 +301,21 @@ public:
             return;
         }
 
+        // Prevent circular references
+        if (parent != nullptr)
+        {
+            Transform* ancestor = parent;
+            while (ancestor != nullptr)
+            {
+                if (ancestor == this)
+                {
+                    // Would create circular reference, silently reject
+                    return;
+                }
+                ancestor = ancestor->m_Parent;
+            }
+        }
+
         // Remove from old parent's children list
         if (m_Parent != nullptr)
         {

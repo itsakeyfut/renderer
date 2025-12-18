@@ -172,6 +172,36 @@ TEST_F(TransformTest, UnparentChild)
     EXPECT_EQ(child.GetParent(), nullptr);
 }
 
+TEST_F(TransformTest, CircularReferencePreventionSelf)
+{
+    Scene::Transform transform;
+
+    // Attempting to set self as parent should be silently rejected
+    transform.SetParent(&transform);
+
+    EXPECT_EQ(transform.GetParent(), nullptr);
+}
+
+TEST_F(TransformTest, CircularReferencePreventionDescendant)
+{
+    Scene::Transform grandparent;
+    Scene::Transform parent;
+    Scene::Transform child;
+
+    parent.SetParent(&grandparent);
+    child.SetParent(&parent);
+
+    // Attempting to set grandparent's parent to child would create a cycle
+    grandparent.SetParent(&child);
+
+    // Should be rejected - grandparent should remain without parent
+    EXPECT_EQ(grandparent.GetParent(), nullptr);
+
+    // Hierarchy should remain intact
+    EXPECT_EQ(parent.GetParent(), &grandparent);
+    EXPECT_EQ(child.GetParent(), &parent);
+}
+
 TEST_F(TransformTest, NestedHierarchy)
 {
     Scene::Transform grandparent;
