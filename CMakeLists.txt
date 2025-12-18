@@ -180,6 +180,7 @@ set(RHI_SOURCES
     src/RHI/RHIBuffer.cpp
     src/RHI/RHICommandBuffer.cpp
     src/RHI/RHICommandPool.cpp
+    src/RHI/RHIDeletionQueue.cpp
     src/RHI/RHIDevice.cpp
     src/RHI/RHIFence.cpp
     src/RHI/RHIInstance.cpp
@@ -194,6 +195,7 @@ set(RHI_HEADERS
     src/RHI/RHIBuffer.h
     src/RHI/RHICommandBuffer.h
     src/RHI/RHICommandPool.h
+    src/RHI/RHIDeletionQueue.h
     src/RHI/RHIDevice.h
     src/RHI/RHIFence.h
     src/RHI/RHIInstance.h
@@ -303,6 +305,11 @@ if(BUILD_TESTS)
     add_executable(TestFrameManager tests/TestFrameManager.cpp)
     target_link_libraries(TestFrameManager PRIVATE Renderer RHI Platform Core GTest::gtest_main)
     gtest_discover_tests(TestFrameManager)
+
+    # RHI DeletionQueue test
+    add_executable(TestRHIDeletionQueue tests/TestRHIDeletionQueue.cpp)
+    target_link_libraries(TestRHIDeletionQueue PRIVATE RHI Platform Core GTest::gtest_main)
+    gtest_discover_tests(TestRHIDeletionQueue)
 endif()
 
 # =============================================================================
