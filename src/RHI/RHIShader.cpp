@@ -16,6 +16,10 @@
 
 #if defined(_WIN32)
     #include <windows.h>
+#else
+    #include <spawn.h>
+    #include <sys/wait.h>
+    extern char** environ;
 #endif
 
 namespace RHI
@@ -423,10 +427,78 @@ namespace RHI
             return false;
         }
 #else
-        int result = std::system(command.c_str());
-        if (result != 0)
+        // Use posix_spawn to execute DXC without shell interpretation
+        // Build argument vector
+        std::vector<std::string> argStrings;
+        argStrings.push_back(dxcPath);
+        argStrings.push_back("-T");
+        argStrings.push_back(GetDXCTargetProfile(stage));
+        argStrings.push_back("-E");
+        argStrings.push_back(config.EntryPoint);
+        argStrings.push_back("-spirv");
+        argStrings.push_back("-fspv-target-env=vulkan1.3");
+
+        if (config.OptimizationLevel == 0)
         {
-            LOG_ERROR("DXC compilation failed with exit code: {}", result);
+            argStrings.push_back("-Od");
+        }
+        else
+        {
+            argStrings.push_back("-O" + std::to_string(config.OptimizationLevel));
+        }
+
+        if (config.EnableDebugInfo)
+        {
+            argStrings.push_back("-Zi");
+            argStrings.push_back("-fspv-debug=vulkan-with-source");
+        }
+
+        for (const auto& includeDir : config.IncludeDirs)
+        {
+            argStrings.push_back("-I");
+            argStrings.push_back(includeDir);
+        }
+
+        argStrings.push_back("-I");
+        argStrings.push_back(filepath.parent_path().string());
+
+        for (const auto& define : config.Defines)
+        {
+            argStrings.push_back("-D");
+            argStrings.push_back(define);
+        }
+
+        argStrings.push_back(filepath.string());
+        argStrings.push_back("-Fo");
+        argStrings.push_back(outputPath.string());
+
+        // Convert to char* array for posix_spawn
+        std::vector<char*> argv;
+        for (auto& arg : argStrings)
+        {
+            argv.push_back(arg.data());
+        }
+        argv.push_back(nullptr);
+
+        pid_t pid;
+        int spawnResult = posix_spawn(&pid, dxcPath.c_str(), nullptr, nullptr, argv.data(), environ);
+        if (spawnResult != 0)
+        {
+            LOG_ERROR("Failed to spawn DXC compiler (error code: {})", spawnResult);
+            return false;
+        }
+
+        int status;
+        if (waitpid(pid, &status, 0) == -1)
+        {
+            LOG_ERROR("Failed to wait for DXC compiler process");
+            return false;
+        }
+
+        if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+        {
+            int exitCode = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+            LOG_ERROR("DXC compilation failed with exit code: {}", exitCode);
             LOG_ERROR("Shader: {}", filepath.string());
             return false;
         }
