@@ -6,3 +6,6 @@ specs/**
 # build artifacts
 build/
 build-release/
+
+# ImGui configuration (user-specific UI layout)
+imgui.ini

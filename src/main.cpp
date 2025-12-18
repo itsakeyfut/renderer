@@ -7,6 +7,7 @@
  */
 
 #include "Core/Log.h"
+#include "Core/Timer.h"
 #include "Platform/Input.h"
 #include "Platform/Window.h"
 #include "RHI/RHIInstance.h"
@@ -18,7 +19,9 @@
 #include "RHI/RHIPipeline.h"
 #include "RHI/RHICommandBuffer.h"
 #include "Renderer/FrameManager.h"
+#include "Renderer/Debug/ImGuiRenderer.h"
 
+#include <imgui.h>
 #include <glm/glm.hpp>
 
 #include <cstdlib>
@@ -93,22 +96,12 @@ bool RecreateSwapchain(
 }
 
 /**
- * @brief Record rendering commands for a frame.
+ * @brief Transition swapchain image to color attachment layout.
  */
-void RecordCommands(
+void TransitionToColorAttachment(
     const Core::Ref<RHI::RHICommandBuffer>& cmdBuffer,
-    const Core::Ref<RHI::RHISwapchain>& swapchain,
-    const Core::Ref<RHI::RHIPipeline>& pipeline,
-    const Core::Ref<RHI::RHIBuffer>& vertexBuffer,
-    uint32_t imageIndex)
+    VkImage image)
 {
-    cmdBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-
-    VkExtent2D extent = swapchain->GetExtent();
-    VkImageView imageView = swapchain->GetImageView(imageIndex);
-    VkImage image = swapchain->GetImage(imageIndex);
-
-    // Transition image to color attachment optimal
     VkImageMemoryBarrier barrier{};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
     barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -130,6 +123,50 @@ void RecordCommands(
         {},
         {},
         {barrier});
+}
+
+/**
+ * @brief Transition swapchain image to present layout.
+ */
+void TransitionToPresent(
+    const Core::Ref<RHI::RHICommandBuffer>& cmdBuffer,
+    VkImage image)
+{
+    VkImageMemoryBarrier barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = image;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
+    barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    barrier.dstAccessMask = 0;
+
+    cmdBuffer->PipelineBarrier(
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        {},
+        {},
+        {barrier});
+}
+
+/**
+ * @brief Record scene rendering commands for a frame.
+ */
+void RecordSceneCommands(
+    const Core::Ref<RHI::RHICommandBuffer>& cmdBuffer,
+    const Core::Ref<RHI::RHISwapchain>& swapchain,
+    const Core::Ref<RHI::RHIPipeline>& pipeline,
+    const Core::Ref<RHI::RHIBuffer>& vertexBuffer,
+    uint32_t imageIndex)
+{
+    VkExtent2D extent = swapchain->GetExtent();
+    VkImageView imageView = swapchain->GetImageView(imageIndex);
 
     // Begin dynamic rendering
     RHI::RenderingConfig renderConfig;
@@ -166,21 +203,6 @@ void RecordCommands(
     cmdBuffer->Draw(3);  // 3 vertices for triangle
 
     cmdBuffer->EndRendering();
-
-    // Transition image to present layout
-    barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    barrier.dstAccessMask = 0;
-
-    cmdBuffer->PipelineBarrier(
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-        {},
-        {},
-        {barrier});
-
-    cmdBuffer->End();
 }
 
 int main()
@@ -382,10 +404,28 @@ int main()
     LOG_INFO("Graphics pipeline created");
 
     // =========================================================================
+    // ImGui Renderer
+    // =========================================================================
+    Renderer::ImGuiRendererConfig imguiConfig;
+    imguiConfig.Instance = instance->GetHandle();
+    imguiConfig.QueueFamily = device->GetQueueFamilies().GraphicsFamily.value();
+    imguiConfig.GraphicsQueue = device->GetGraphicsQueue();
+    imguiConfig.ColorFormat = swapchain->GetImageFormat();
+    imguiConfig.ImageCount = swapchain->GetImageCount();
+
+    auto imguiRenderer = Renderer::ImGuiRenderer::Create(device, window, imguiConfig);
+    if (!imguiRenderer)
+    {
+        LOG_FATAL("Failed to create ImGui renderer!");
+        return EXIT_FAILURE;
+    }
+    LOG_INFO("ImGui renderer created");
+
+    // =========================================================================
     // Main Loop
     // =========================================================================
     LOG_INFO("Entering main loop...");
-    LOG_INFO("Press ESC to exit");
+    LOG_INFO("Press ESC to exit, F1 to toggle stats window, F2 to toggle demo window");
 
     bool framebufferResized = false;
     window.SetResizeCallback([&framebufferResized]([[maybe_unused]] uint32_t width,
@@ -394,15 +434,43 @@ int main()
         framebufferResized = true;
     });
 
+    // Frame timing - use the global timer for consistent timing across the application
+    Core::Timer& frameTimer = Core::GetGlobalTimer();
+    frameTimer.Start();
+    float displayFPS = 0.0f;
+    float displayFrameTime = 0.0f;
+
+    // Debug UI state
+    bool showStatsWindow = true;
+    bool showDemoWindow = false;
+
+    // Debug stats
+    Renderer::DebugStats stats{};
+
     while (!window.ShouldClose())
     {
-        window.PollEvents();
-        Platform::Input::Update();
+        // Update frame timing
+        frameTimer.Tick();
+        displayFPS = frameTimer.GetFPS();
+        displayFrameTime = frameTimer.GetFrameTimeMs();
 
-        // Handle ESC key
+        // Update input state BEFORE polling events
+        // This preserves the previous frame's state for press/release detection
+        Platform::Input::Update();
+        window.PollEvents();
+
+        // Global application shortcuts (always active)
         if (Platform::Input::IsKeyPressed(Platform::KeyCode::Escape))
         {
             break;
+        }
+        if (Platform::Input::IsKeyPressed(Platform::KeyCode::F1))
+        {
+            showStatsWindow = !showStatsWindow;
+        }
+        if (Platform::Input::IsKeyPressed(Platform::KeyCode::F2))
+        {
+            showDemoWindow = !showDemoWindow;
         }
 
         // Handle window minimization
@@ -467,14 +535,47 @@ int main()
             continue;
         }
 
-        // Get current frame's command buffer
+        // =====================================================================
+        // ImGui Frame
+        // =====================================================================
+        imguiRenderer->BeginFrame();
+
+        // Update debug stats
+        stats.FrameTime = displayFrameTime;
+        stats.FPS = displayFPS;
+        stats.DrawCalls = 1;  // Triangle draw call
+        stats.TriangleCount = 1;
+
+        // Show debug windows
+        imguiRenderer->ShowStatsWindow(stats, &showStatsWindow);
+        imguiRenderer->ShowDemoWindow(&showDemoWindow);
+
+        imguiRenderer->EndFrame();
+
+        // =====================================================================
+        // Record Rendering Commands
+        // =====================================================================
         auto& cmdBuffer = frameManager->GetCommandBuffer();
-
-        // Reset command buffer for new recording
         cmdBuffer->Reset();
+        cmdBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
-        // Record rendering commands
-        RecordCommands(cmdBuffer, swapchain, pipeline, vertexBuffer, imageIndex);
+        VkExtent2D extent = swapchain->GetExtent();
+        VkImageView imageView = swapchain->GetImageView(imageIndex);
+        VkImage image = swapchain->GetImage(imageIndex);
+
+        // Transition to color attachment
+        TransitionToColorAttachment(cmdBuffer, image);
+
+        // Render scene (triangle)
+        RecordSceneCommands(cmdBuffer, swapchain, pipeline, vertexBuffer, imageIndex);
+
+        // Render ImGui overlay
+        imguiRenderer->Render(cmdBuffer, imageView, extent);
+
+        // Transition to present
+        TransitionToPresent(cmdBuffer, image);
+
+        cmdBuffer->End();
 
         // Submit command buffer
         VkSubmitInfo submitInfo{};
@@ -530,6 +631,9 @@ int main()
     device->WaitIdle();
 
     // Explicit cleanup (RAII will handle most of this)
+    // ImGui must be destroyed before device resources
+    imguiRenderer.reset();
+
     pipeline.reset();
 
     // Clear pipelineDesc shader references (it holds Core::Ref to shaders)
