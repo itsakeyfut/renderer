@@ -89,6 +89,13 @@ namespace RHI
         const Core::Ref<RHIDevice>& device,
         const GraphicsPipelineDesc& desc)
     {
+        // Tessellation shaders not yet supported (requires VkPipelineTessellationStateCreateInfo)
+        if (desc.TessControlShader || desc.TessEvalShader)
+        {
+            LOG_ERROR("RHIPipeline::InitializeGraphics: Tessellation shaders not yet supported");
+            return false;
+        }
+
         m_Device = device->GetHandle();
         m_BindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 
@@ -116,15 +123,8 @@ namespace RHI
             shaderStages.push_back(desc.GeometryShader->GetStageInfo());
         }
 
-        if (desc.TessControlShader)
-        {
-            shaderStages.push_back(desc.TessControlShader->GetStageInfo());
-        }
-
-        if (desc.TessEvalShader)
-        {
-            shaderStages.push_back(desc.TessEvalShader->GetStageInfo());
-        }
+        // Note: Tessellation shaders are validated and rejected at the start of this function
+        // until VkPipelineTessellationStateCreateInfo support is implemented
 
         // Vertex Input State
         VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
