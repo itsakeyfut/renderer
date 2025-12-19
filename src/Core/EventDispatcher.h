@@ -211,7 +211,9 @@ public:
             return;
         }
 
-        for (const auto& listener : it->second)
+        // Copy listeners to avoid iterator invalidation if callbacks modify subscriptions
+        auto listenersCopy = it->second;
+        for (const auto& listener : listenersCopy)
         {
             if (event.Handled)
             {

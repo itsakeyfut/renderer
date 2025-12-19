@@ -332,6 +332,63 @@ TEST_F(EventDispatcherTest, UniqueHandles)
     EXPECT_NE(handle1, Core::INVALID_SUBSCRIPTION);
 }
 
+TEST_F(EventDispatcherTest, UnsubscribeDuringDispatchIsSafe)
+{
+    // Test that unsubscribing during dispatch doesn't cause iterator invalidation
+    int callCount = 0;
+    Core::SubscriptionHandle handle1 = Core::INVALID_SUBSCRIPTION;
+
+    handle1 = m_Dispatcher.Subscribe<Core::WindowResizeEvent>(
+        [&](Core::WindowResizeEvent&) {
+            callCount++;
+            // Unsubscribe self during dispatch - should not crash
+            m_Dispatcher.Unsubscribe(handle1);
+        }
+    );
+
+    m_Dispatcher.Subscribe<Core::WindowResizeEvent>(
+        [&](Core::WindowResizeEvent&) {
+            callCount++;
+        }
+    );
+
+    Core::WindowResizeEvent event(800, 600);
+    EXPECT_NO_THROW(m_Dispatcher.Dispatch(event));
+
+    // Both listeners should have been called (snapshot approach)
+    EXPECT_EQ(callCount, 2);
+
+    // After dispatch, only second listener should remain
+    EXPECT_EQ(m_Dispatcher.GetListenerCount<Core::WindowResizeEvent>(), 1u);
+}
+
+TEST_F(EventDispatcherTest, SubscribeDuringDispatchIsSafe)
+{
+    // Test that subscribing during dispatch doesn't affect current iteration
+    int callCount = 0;
+
+    m_Dispatcher.Subscribe<Core::WindowResizeEvent>(
+        [&](Core::WindowResizeEvent&) {
+            callCount++;
+            // Subscribe new listener during dispatch
+            m_Dispatcher.Subscribe<Core::WindowResizeEvent>(
+                [&](Core::WindowResizeEvent&) {
+                    callCount++;
+                }
+            );
+        }
+    );
+
+    Core::WindowResizeEvent event(800, 600);
+    EXPECT_NO_THROW(m_Dispatcher.Dispatch(event));
+
+    // Only original listener should have been called (new one added after snapshot)
+    EXPECT_EQ(callCount, 1);
+
+    // Now there should be 2 listeners
+    EXPECT_EQ(m_Dispatcher.GetListenerCount<Core::WindowResizeEvent>(), 2u);
+}
+
 // =============================================================================
 // EventHandler Tests
 // =============================================================================
