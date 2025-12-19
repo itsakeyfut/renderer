@@ -231,6 +231,9 @@ void RHITexture::TransitionLayout(
         0, nullptr,
         0, nullptr,
         1, &barrier);
+
+    // Update the tracked layout state
+    m_Image->SetLayout(newLayout);
 }
 
 bool RHITexture::GenerateMipmaps(const Core::Ref<RHIDevice>& device)
