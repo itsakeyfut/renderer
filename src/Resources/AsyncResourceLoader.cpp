@@ -14,6 +14,31 @@
 
 namespace Resources {
 
+namespace {
+
+/**
+ * @brief Converts LoadPriority to ThreadPool::Priority.
+ *
+ * Maps LoadPriority::Immediate to ThreadPool::Priority::High since
+ * ThreadPool only supports Low/Normal/High priorities.
+ */
+Core::ThreadPool::Priority ToThreadPoolPriority(LoadPriority priority)
+{
+    switch (priority) {
+        case LoadPriority::Low:
+            return Core::ThreadPool::Priority::Low;
+        case LoadPriority::Normal:
+            return Core::ThreadPool::Priority::Normal;
+        case LoadPriority::High:
+        case LoadPriority::Immediate:
+            return Core::ThreadPool::Priority::High;
+        default:
+            return Core::ThreadPool::Priority::Normal;
+    }
+}
+
+} // anonymous namespace
+
 Core::Ref<AsyncResourceLoader> AsyncResourceLoader::Create(
     const Core::Ref<RHI::RHIDevice>& device,
     size_t numWorkerThreads)
@@ -115,7 +140,7 @@ void AsyncResourceLoader::LoadTextureAsync(
 
     // Submit to thread pool
     m_ThreadPool->SubmitWithPriority(
-        static_cast<Core::ThreadPool::Priority>(priority),
+        ToThreadPoolPriority(priority),
         [this, task = std::move(task)]() mutable {
             ExecuteTextureLoad(std::move(task));
         }
@@ -168,7 +193,7 @@ std::future<TextureHandle> AsyncResourceLoader::LoadTextureAsync(
 
     // Submit to thread pool
     m_ThreadPool->SubmitWithPriority(
-        static_cast<Core::ThreadPool::Priority>(priority),
+        ToThreadPoolPriority(priority),
         [this, task = std::move(task)]() mutable {
             ExecuteTextureLoad(std::move(task));
         }
@@ -288,7 +313,7 @@ void AsyncResourceLoader::LoadModelAsync(
 
     // Submit to thread pool
     m_ThreadPool->SubmitWithPriority(
-        static_cast<Core::ThreadPool::Priority>(priority),
+        ToThreadPoolPriority(priority),
         [this, task = std::move(task)]() mutable {
             ExecuteModelLoad(std::move(task));
         }
@@ -341,7 +366,7 @@ std::future<ModelHandle> AsyncResourceLoader::LoadModelAsync(
 
     // Submit to thread pool
     m_ThreadPool->SubmitWithPriority(
-        static_cast<Core::ThreadPool::Priority>(priority),
+        ToThreadPoolPriority(priority),
         [this, task = std::move(task)]() mutable {
             ExecuteModelLoad(std::move(task));
         }

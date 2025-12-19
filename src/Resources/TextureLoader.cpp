@@ -230,7 +230,7 @@ Core::Ref<Texture> TextureLoader::CreatePlaceholder(
             bool isColor1 = ((x / checkSize) + (y / checkSize)) % 2 == 0;
             uint32_t color = isColor1 ? color1 : color2;
 
-            // Colors are in RGBA format (low byte = R, high byte = A)
+            // Colors are packed as 0xRRGGBBAA (R in high byte, A in low byte)
             pixels[index + 0] = static_cast<uint8_t>((color >> 24) & 0xFF); // R
             pixels[index + 1] = static_cast<uint8_t>((color >> 16) & 0xFF); // G
             pixels[index + 2] = static_cast<uint8_t>((color >> 8) & 0xFF);  // B
