@@ -94,7 +94,12 @@ namespace RHI
                     VkCommandBuffer cmdHandle = cmdBuffer->GetHandle();
                     submitInfo.pCommandBuffers = &cmdHandle;
 
-                    vkQueueSubmit(device->GetGraphicsQueue(), 1, &submitInfo, VK_NULL_HANDLE);
+                    VkResult result = vkQueueSubmit(device->GetGraphicsQueue(), 1, &submitInfo, VK_NULL_HANDLE);
+                    if (result != VK_SUCCESS)
+                    {
+                        LOG_ERROR("Failed to submit final layout transition command: VkResult {}", static_cast<int>(result));
+                        return nullptr;
+                    }
                     vkQueueWaitIdle(device->GetGraphicsQueue());
                 }
             }
