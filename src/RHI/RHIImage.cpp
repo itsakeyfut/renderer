@@ -377,6 +377,11 @@ namespace RHI
         {
             LOG_WARN("Unsupported image layout transition: {} -> {}",
                      static_cast<int>(oldLayout), static_cast<int>(newLayout));
+            // Use conservative fallback for unknown transitions
+            barrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+            srcStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+            dstStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
         }
 
         cmdBuffer->PipelineBarrier(srcStage, dstStage, {}, {}, {barrier});
@@ -502,7 +507,12 @@ namespace RHI
         VkCommandBuffer cmdHandle = commandBuffer->GetHandle();
         submitInfo.pCommandBuffers = &cmdHandle;
 
-        vkQueueSubmit(device->GetGraphicsQueue(), 1, &submitInfo, VK_NULL_HANDLE);
+        VkResult result = vkQueueSubmit(device->GetGraphicsQueue(), 1, &submitInfo, VK_NULL_HANDLE);
+        if (result != VK_SUCCESS)
+        {
+            LOG_ERROR("Failed to submit mipmap generation command: VkResult {}", static_cast<int>(result));
+            return false;
+        }
         vkQueueWaitIdle(device->GetGraphicsQueue());
 
         m_CurrentLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;

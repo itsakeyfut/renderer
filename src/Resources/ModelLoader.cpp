@@ -12,6 +12,9 @@
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wtype-limits"
 #pragma GCC diagnostic ignored "-Wsign-compare"
+#ifdef __GNUC__
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
+#endif
 #endif
 
 #define TINYGLTF_IMPLEMENTATION
@@ -33,6 +36,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <unordered_set>
 #include <filesystem>
 #include <unordered_map>
 
@@ -61,7 +65,19 @@ bool ReadAccessorData(
     }
 
     const auto& accessor = model.accessors[accessorIndex];
+
+    // Validate bufferView index
+    if (accessor.bufferView < 0 ||
+        accessor.bufferView >= static_cast<int>(model.bufferViews.size())) {
+        return false;
+    }
     const auto& bufferView = model.bufferViews[accessor.bufferView];
+
+    // Validate buffer index
+    if (bufferView.buffer < 0 ||
+        bufferView.buffer >= static_cast<int>(model.buffers.size())) {
+        return false;
+    }
     const auto& buffer = model.buffers[bufferView.buffer];
 
     outData.resize(accessor.count);
@@ -100,7 +116,19 @@ bool ReadScalarAccessor(
     }
 
     const auto& accessor = model.accessors[accessorIndex];
+
+    // Validate bufferView index
+    if (accessor.bufferView < 0 ||
+        accessor.bufferView >= static_cast<int>(model.bufferViews.size())) {
+        return false;
+    }
     const auto& bufferView = model.bufferViews[accessor.bufferView];
+
+    // Validate buffer index
+    if (bufferView.buffer < 0 ||
+        bufferView.buffer >= static_cast<int>(model.buffers.size())) {
+        return false;
+    }
     const auto& buffer = model.buffers[bufferView.buffer];
 
     outData.resize(accessor.count);
@@ -161,6 +189,12 @@ void CalculateFlatNormals(
         uint32_t i1 = indices[i + 1];
         uint32_t i2 = indices[i + 2];
 
+        // Validate indices are within bounds
+        if (i0 >= vertices.size() || i1 >= vertices.size() || i2 >= vertices.size()) {
+            LOG_WARN("Invalid index in normal calculation: {}, {}, {}", i0, i1, i2);
+            continue;
+        }
+
         const glm::vec3& p0 = vertices[i0].Position;
         const glm::vec3& p1 = vertices[i1].Position;
         const glm::vec3& p2 = vertices[i2].Position;
@@ -206,6 +240,12 @@ void CalculateTangents(
         uint32_t i0 = indices[i];
         uint32_t i1 = indices[i + 1];
         uint32_t i2 = indices[i + 2];
+
+        // Validate indices are within bounds
+        if (i0 >= vertices.size() || i1 >= vertices.size() || i2 >= vertices.size()) {
+            LOG_WARN("Invalid index in tangent calculation: {}, {}, {}", i0, i1, i2);
+            continue;
+        }
 
         const glm::vec3& p0 = vertices[i0].Position;
         const glm::vec3& p1 = vertices[i1].Position;
@@ -661,8 +701,21 @@ Core::Ref<Model> ModelLoader::LoadGLTF(
         }
     }
     else {
-        // No scenes, process all root nodes
+        // No scenes, process only root nodes (nodes that are not children of other nodes)
+        std::unordered_set<size_t> childNodes;
+        for (const auto& node : gltfModel.nodes) {
+            for (int childIdx : node.children) {
+                if (childIdx >= 0) {
+                    childNodes.insert(static_cast<size_t>(childIdx));
+                }
+            }
+        }
+
         for (size_t i = 0; i < gltfModel.nodes.size(); ++i) {
+            // Skip non-root nodes to avoid double processing
+            if (childNodes.count(i) > 0) {
+                continue;
+            }
             ProcessNode(gltfModel, gltfModel.nodes[i], options, *model);
         }
     }

@@ -128,7 +128,11 @@ namespace RHI
         case FilterMode::Linear:
             return VK_FILTER_LINEAR;
         case FilterMode::Cubic:
-            return VK_FILTER_CUBIC_EXT;
+            // VK_FILTER_CUBIC_EXT requires VK_EXT_filter_cubic extension
+            // Fall back to Linear until extension support is implemented
+            LOG_WARN("Cubic filter requested but VK_EXT_filter_cubic extension "
+                     "support not implemented, falling back to Linear");
+            return VK_FILTER_LINEAR;
         default:
             return VK_FILTER_LINEAR;
         }
