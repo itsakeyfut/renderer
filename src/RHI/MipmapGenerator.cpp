@@ -148,6 +148,10 @@ namespace RHI
 
     uint32_t MipmapGenerator::CalculateMipLevels(uint32_t width, uint32_t height)
     {
+        if (width == 0 || height == 0)
+        {
+            return 1;
+        }
         return static_cast<uint32_t>(std::floor(std::log2(std::max(width, height)))) + 1;
     }
 
@@ -167,6 +171,7 @@ namespace RHI
         switch (format)
         {
         case VK_FORMAT_D16_UNORM:
+        case VK_FORMAT_X8_D24_UNORM_PACK32:
         case VK_FORMAT_D32_SFLOAT:
             return VK_IMAGE_ASPECT_DEPTH_BIT;
 

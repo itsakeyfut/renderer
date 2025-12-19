@@ -27,6 +27,13 @@ protected:
     }
 };
 
+TEST_F(MipmapCalculationTest, CalculateMipLevels_ZeroDimension) {
+    // Zero dimensions should return 1 (defensive handling)
+    EXPECT_EQ(RHI::MipmapGenerator::CalculateMipLevels(0, 0), 1u);
+    EXPECT_EQ(RHI::MipmapGenerator::CalculateMipLevels(0, 100), 1u);
+    EXPECT_EQ(RHI::MipmapGenerator::CalculateMipLevels(100, 0), 1u);
+}
+
 TEST_F(MipmapCalculationTest, CalculateMipLevels_1x1) {
     // 1x1 texture should have 1 mip level
     uint32_t levels = RHI::MipmapGenerator::CalculateMipLevels(1, 1);
