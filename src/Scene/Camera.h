@@ -127,7 +127,13 @@ public:
      */
     void LookAt(const glm::vec3& target, const glm::vec3& up = glm::vec3(0.0f, 1.0f, 0.0f))
     {
-        glm::vec3 direction = glm::normalize(target - m_Position);
+        glm::vec3 diff = target - m_Position;
+        float length = glm::length(diff);
+        if (length < 0.0001f)
+        {
+            return; // Target is at camera position, nothing to do
+        }
+        glm::vec3 direction = diff / length;
 
         // Calculate pitch and yaw from direction vector
         // GetForward: x = cos(pitch)*cos(yaw), y = sin(pitch), z = cos(pitch)*sin(yaw)

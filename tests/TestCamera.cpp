@@ -243,6 +243,23 @@ TEST_F(CameraTest, LookAt)
     EXPECT_NEAR(forward.z, 0.0f, 0.01f);
 }
 
+TEST_F(CameraTest, LookAtSamePosition)
+{
+    Scene::Camera camera;
+    camera.SetPosition(glm::vec3(5.0f, 0.0f, 0.0f));
+    camera.SetRotation(30.0f, 45.0f);
+
+    float originalPitch = camera.GetPitch();
+    float originalYaw = camera.GetYaw();
+
+    // LookAt with target at same position as camera should be a no-op
+    camera.LookAt(glm::vec3(5.0f, 0.0f, 0.0f));
+
+    // Rotation should remain unchanged
+    EXPECT_FLOAT_EQ(camera.GetPitch(), originalPitch);
+    EXPECT_FLOAT_EQ(camera.GetYaw(), originalYaw);
+}
+
 TEST_F(CameraTest, VulkanClipCorrection)
 {
     glm::mat4 correction = Scene::Camera::GetVulkanClipCorrection();
