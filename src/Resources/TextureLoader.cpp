@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <vector>
 
 namespace Resources
 {
@@ -192,6 +193,70 @@ Core::Ref<Texture> TextureLoader::CreateDefaultNormal(const Core::Ref<RHI::RHIDe
         return nullptr;
     }
 
+    return texture;
+}
+
+Core::Ref<Texture> TextureLoader::CreatePlaceholder(
+    const Core::Ref<RHI::RHIDevice>& device,
+    uint32_t size,
+    uint32_t color1,
+    uint32_t color2)
+{
+    ASSERT(device != nullptr);
+    ASSERT(size > 0);
+
+    // Make sure size is power of 2 for nice checkerboard
+    if ((size & (size - 1)) != 0) {
+        // Round up to next power of 2
+        size = 1;
+        while (size < 64) size <<= 1;
+    }
+
+    auto texture = Core::CreateRef<Texture>();
+    texture->Width = size;
+    texture->Height = size;
+    texture->Channels = 4;
+    texture->Path = "[placeholder]";
+
+    // Create checkerboard pattern
+    std::vector<uint8_t> pixels(size * size * 4);
+    uint32_t checkSize = size / 8;  // 8x8 checkerboard
+    if (checkSize == 0) checkSize = 1;
+
+    for (uint32_t y = 0; y < size; ++y) {
+        for (uint32_t x = 0; x < size; ++x) {
+            uint32_t index = (y * size + x) * 4;
+            bool isColor1 = ((x / checkSize) + (y / checkSize)) % 2 == 0;
+            uint32_t color = isColor1 ? color1 : color2;
+
+            // Colors are in RGBA format (low byte = R, high byte = A)
+            pixels[index + 0] = static_cast<uint8_t>((color >> 24) & 0xFF); // R
+            pixels[index + 1] = static_cast<uint8_t>((color >> 16) & 0xFF); // G
+            pixels[index + 2] = static_cast<uint8_t>((color >> 8) & 0xFF);  // B
+            pixels[index + 3] = static_cast<uint8_t>(color & 0xFF);         // A
+        }
+    }
+
+    // Create RHI image
+    RHI::ImageDesc imageDesc;
+    imageDesc.Width = size;
+    imageDesc.Height = size;
+    imageDesc.Format = VK_FORMAT_R8G8B8A8_SRGB;
+    imageDesc.Usage = RHI::ImageUsage::Texture;
+    imageDesc.MipLevels = 1;
+
+    texture->Image = RHI::RHIImage::CreateWithData(
+        device,
+        imageDesc,
+        pixels.data(),
+        static_cast<VkDeviceSize>(pixels.size()));
+
+    if (!texture->Image) {
+        LOG_ERROR("Failed to create placeholder texture");
+        return nullptr;
+    }
+
+    LOG_DEBUG("Created placeholder texture ({}x{})", size, size);
     return texture;
 }
 

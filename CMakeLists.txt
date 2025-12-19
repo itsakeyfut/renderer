@@ -187,6 +187,7 @@ endif()
 set(CORE_SOURCES
     src/Core/Config.cpp
     src/Core/Log.cpp
+    src/Core/ThreadPool.cpp
     src/Core/Timer.cpp
 )
 
@@ -196,6 +197,7 @@ set(CORE_HEADERS
     src/Core/Event.h
     src/Core/EventDispatcher.h
     src/Core/Log.h
+    src/Core/ThreadPool.h
     src/Core/Timer.h
     src/Core/Types.h
 )
@@ -268,12 +270,14 @@ target_link_libraries(RHI PUBLIC Core Platform ${VULKAN_TARGET} GPUOpen::VulkanM
 
 # Resources library
 set(RESOURCES_SOURCES
+    src/Resources/AsyncResourceLoader.cpp
     src/Resources/ModelLoader.cpp
     src/Resources/ResourceManager.cpp
     src/Resources/TextureLoader.cpp
 )
 
 set(RESOURCES_HEADERS
+    src/Resources/AsyncResourceLoader.h
     src/Resources/ResourceHandle.h
     src/Resources/ResourcePool.h
     src/Resources/ResourceManager.h
@@ -452,6 +456,16 @@ if(BUILD_TESTS)
     add_executable(TestRHIDescriptor tests/TestRHIDescriptor.cpp)
     target_link_libraries(TestRHIDescriptor PRIVATE RHI Resources Platform Core GTest::gtest_main)
     gtest_discover_tests(TestRHIDescriptor)
+
+    # ThreadPool test
+    add_executable(TestThreadPool tests/TestThreadPool.cpp)
+    target_link_libraries(TestThreadPool PRIVATE Core GTest::gtest_main)
+    gtest_discover_tests(TestThreadPool)
+
+    # AsyncResourceLoader test
+    add_executable(TestAsyncResourceLoader tests/TestAsyncResourceLoader.cpp)
+    target_link_libraries(TestAsyncResourceLoader PRIVATE Resources Core GTest::gtest_main)
+    gtest_discover_tests(TestAsyncResourceLoader)
 endif()
 
 # =============================================================================

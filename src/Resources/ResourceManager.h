@@ -14,9 +14,14 @@
 #include "Resources/ResourceHandle.h"
 #include "Resources/ResourcePool.h"
 
+#include <functional>
+#include <future>
 #include <string>
 #include <unordered_map>
-#include <functional>
+
+namespace RHI {
+    class RHIDevice;
+} // namespace RHI
 
 namespace Resources {
 
@@ -24,6 +29,17 @@ namespace Resources {
 class Texture;
 class Model;
 class Material;
+class AsyncResourceLoader;
+
+/**
+ * @brief Load priority levels for async loading.
+ */
+enum class LoadPriority;
+
+/**
+ * @brief Load request status.
+ */
+enum class LoadStatus;
 
 /**
  * @brief Texture resource descriptor for creation.
@@ -173,6 +189,32 @@ public:
      */
     bool IsTextureValid(TextureHandle handle) const;
 
+    /**
+     * @brief Loads a texture asynchronously with callback.
+     *
+     * The texture is loaded on a background thread. The callback is invoked
+     * on the main thread during ProcessAsyncLoads().
+     *
+     * @param path Path to the texture file.
+     * @param callback Callback invoked when loading completes.
+     * @param desc Optional texture loading parameters.
+     */
+    void LoadTextureAsync(
+        const std::string& path,
+        LoadCallback<TextureHandle> callback,
+        const TextureDesc& desc = {});
+
+    /**
+     * @brief Loads a texture asynchronously with future.
+     *
+     * @param path Path to the texture file.
+     * @param desc Optional texture loading parameters.
+     * @return Future that will contain the texture handle.
+     */
+    std::future<TextureHandle> LoadTextureAsync(
+        const std::string& path,
+        const TextureDesc& desc = {});
+
     // =========================================================================
     // Model Management
     // =========================================================================
@@ -219,6 +261,32 @@ public:
      * @return true if the handle refers to a valid model.
      */
     bool IsModelValid(ModelHandle handle) const;
+
+    /**
+     * @brief Loads a model asynchronously with callback.
+     *
+     * The model is loaded on a background thread. The callback is invoked
+     * on the main thread during ProcessAsyncLoads().
+     *
+     * @param path Path to the model file.
+     * @param callback Callback invoked when loading completes.
+     * @param desc Optional model loading parameters.
+     */
+    void LoadModelAsync(
+        const std::string& path,
+        LoadCallback<ModelHandle> callback,
+        const ModelDesc& desc = {});
+
+    /**
+     * @brief Loads a model asynchronously with future.
+     *
+     * @param path Path to the model file.
+     * @param desc Optional model loading parameters.
+     * @return Future that will contain the model handle.
+     */
+    std::future<ModelHandle> LoadModelAsync(
+        const std::string& path,
+        const ModelDesc& desc = {});
 
     // =========================================================================
     // Material Management
@@ -323,6 +391,65 @@ public:
      */
     void ResetStats();
 
+    // =========================================================================
+    // Async Loading
+    // =========================================================================
+
+    /**
+     * @brief Initializes async loading capabilities.
+     *
+     * Must be called before using async load methods.
+     *
+     * @param device RHI device for GPU resource creation.
+     * @param numWorkerThreads Number of loader threads (0 = auto).
+     */
+    void InitializeAsync(
+        const Core::Ref<RHI::RHIDevice>& device,
+        size_t numWorkerThreads = 0);
+
+    /**
+     * @brief Shuts down async loading.
+     *
+     * Cancels pending loads and waits for completion.
+     */
+    void ShutdownAsync();
+
+    /**
+     * @brief Processes completed async loads.
+     *
+     * Must be called from the main/render thread. Invokes callbacks for
+     * completed loads and transfers resources to GPU.
+     *
+     * @param maxProcessCount Maximum number of loads to process (0 = all).
+     * @return Number of loads processed.
+     */
+    size_t ProcessAsyncLoads(size_t maxProcessCount = 0);
+
+    /**
+     * @brief Checks if a resource is currently being loaded asynchronously.
+     * @param path Resource path.
+     * @return true if the resource is being loaded.
+     */
+    bool IsLoadingAsync(const std::string& path) const;
+
+    /**
+     * @brief Gets the number of pending async loads.
+     * @return Number of loads waiting or in progress.
+     */
+    size_t GetPendingAsyncLoadCount() const;
+
+    /**
+     * @brief Checks if async loading is available.
+     * @return true if InitializeAsync() has been called.
+     */
+    bool IsAsyncAvailable() const { return m_AsyncLoader != nullptr; }
+
+    /**
+     * @brief Gets the async loader instance.
+     * @return Shared pointer to the async loader, or nullptr if not initialized.
+     */
+    Core::Ref<AsyncResourceLoader> GetAsyncLoader() const { return m_AsyncLoader; }
+
     // Non-copyable, non-movable (singleton)
     ResourceManager(const ResourceManager&) = delete;
     ResourceManager& operator=(const ResourceManager&) = delete;
@@ -348,6 +475,9 @@ private:
     // Statistics
     mutable ResourceStats m_Stats;
     bool m_Initialized = false;
+
+    // Async loading
+    Core::Ref<AsyncResourceLoader> m_AsyncLoader;
 };
 
 } // namespace Resources

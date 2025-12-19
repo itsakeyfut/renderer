@@ -134,6 +134,24 @@ public:
     static Core::Ref<Texture> CreateDefaultNormal(const Core::Ref<RHI::RHIDevice>& device);
 
     /**
+     * @brief Create a placeholder texture for async loading.
+     *
+     * Creates a checkerboard pattern texture to indicate that
+     * the actual texture is still being loaded.
+     *
+     * @param device The logical device.
+     * @param size Size of the checkerboard (width and height).
+     * @param color1 First checkerboard color (default: magenta).
+     * @param color2 Second checkerboard color (default: black).
+     * @return Shared pointer to the created texture.
+     */
+    static Core::Ref<Texture> CreatePlaceholder(
+        const Core::Ref<RHI::RHIDevice>& device,
+        uint32_t size = 64,
+        uint32_t color1 = 0xFF00FFFF,  // Magenta
+        uint32_t color2 = 0x000000FF); // Black
+
+    /**
      * @brief Check if a file extension is supported.
      *
      * @param extension File extension (e.g., ".png", ".jpg").

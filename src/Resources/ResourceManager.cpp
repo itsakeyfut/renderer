@@ -4,6 +4,7 @@
  */
 
 #include "Resources/ResourceManager.h"
+#include "Resources/AsyncResourceLoader.h"
 #include "Resources/Texture.h"
 #include "Resources/Model.h"
 #include "Resources/Material.h"
@@ -358,6 +359,119 @@ ResourceStats ResourceManager::GetStats() const
 void ResourceManager::ResetStats()
 {
     m_Stats = ResourceStats();
+}
+
+// =============================================================================
+// Async Loading
+// =============================================================================
+
+void ResourceManager::InitializeAsync(
+    const Core::Ref<RHI::RHIDevice>& device,
+    size_t numWorkerThreads)
+{
+    if (m_AsyncLoader) {
+        LOG_WARN("Async loading already initialized");
+        return;
+    }
+
+    m_AsyncLoader = AsyncResourceLoader::Create(device, numWorkerThreads);
+    LOG_INFO("Async resource loading initialized");
+}
+
+void ResourceManager::ShutdownAsync()
+{
+    if (m_AsyncLoader) {
+        m_AsyncLoader->Shutdown();
+        m_AsyncLoader.reset();
+        LOG_INFO("Async resource loading shutdown");
+    }
+}
+
+void ResourceManager::LoadTextureAsync(
+    const std::string& path,
+    LoadCallback<TextureHandle> callback,
+    const TextureDesc& desc)
+{
+    if (!m_AsyncLoader) {
+        LOG_ERROR("Async loading not initialized. Call InitializeAsync() first.");
+        if (callback) {
+            callback(TextureHandle(), false);
+        }
+        return;
+    }
+
+    m_AsyncLoader->LoadTextureAsync(path, std::move(callback), LoadPriority::Normal, desc);
+}
+
+std::future<TextureHandle> ResourceManager::LoadTextureAsync(
+    const std::string& path,
+    const TextureDesc& desc)
+{
+    if (!m_AsyncLoader) {
+        LOG_ERROR("Async loading not initialized. Call InitializeAsync() first.");
+        std::promise<TextureHandle> promise;
+        promise.set_value(TextureHandle());
+        return promise.get_future();
+    }
+
+    return m_AsyncLoader->LoadTextureAsync(path, LoadPriority::Normal, desc);
+}
+
+void ResourceManager::LoadModelAsync(
+    const std::string& path,
+    LoadCallback<ModelHandle> callback,
+    const ModelDesc& desc)
+{
+    if (!m_AsyncLoader) {
+        LOG_ERROR("Async loading not initialized. Call InitializeAsync() first.");
+        if (callback) {
+            callback(ModelHandle(), false);
+        }
+        return;
+    }
+
+    m_AsyncLoader->LoadModelAsync(path, std::move(callback), LoadPriority::Normal, desc);
+}
+
+std::future<ModelHandle> ResourceManager::LoadModelAsync(
+    const std::string& path,
+    const ModelDesc& desc)
+{
+    if (!m_AsyncLoader) {
+        LOG_ERROR("Async loading not initialized. Call InitializeAsync() first.");
+        std::promise<ModelHandle> promise;
+        promise.set_value(ModelHandle());
+        return promise.get_future();
+    }
+
+    return m_AsyncLoader->LoadModelAsync(path, LoadPriority::Normal, desc);
+}
+
+size_t ResourceManager::ProcessAsyncLoads(size_t maxProcessCount)
+{
+    if (!m_AsyncLoader) {
+        return 0;
+    }
+
+    return m_AsyncLoader->ProcessCompletedLoads(maxProcessCount);
+}
+
+bool ResourceManager::IsLoadingAsync(const std::string& path) const
+{
+    if (!m_AsyncLoader) {
+        return false;
+    }
+
+    return m_AsyncLoader->IsLoading(path);
+}
+
+size_t ResourceManager::GetPendingAsyncLoadCount() const
+{
+    if (!m_AsyncLoader) {
+        return 0;
+    }
+
+    return m_AsyncLoader->GetPendingCount();
 }
 
 } // namespace Resources
