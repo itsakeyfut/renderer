@@ -466,6 +466,11 @@ if(BUILD_TESTS)
     target_link_libraries(TestRHITexture PRIVATE RHI Platform Core GTest::gtest_main)
     gtest_discover_tests(TestRHITexture)
 
+    # RHI Sampler test
+    add_executable(TestRHISampler tests/TestRHISampler.cpp)
+    target_link_libraries(TestRHISampler PRIVATE RHI Platform Core GTest::gtest_main)
+    gtest_discover_tests(TestRHISampler)
+
     # ThreadPool test
     add_executable(TestThreadPool tests/TestThreadPool.cpp)
     target_link_libraries(TestThreadPool PRIVATE Core GTest::gtest_main)

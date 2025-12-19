@@ -173,6 +173,13 @@ namespace RHI
         static Core::Ref<RHISampler> CreateLinear(const Core::Ref<RHIDevice>& device);
 
         /**
+         * @brief Create a linear sampler with clamp-to-edge addressing
+         * @param device The logical device
+         * @return Shared pointer to the created sampler
+         */
+        static Core::Ref<RHISampler> CreateLinearClamp(const Core::Ref<RHIDevice>& device);
+
+        /**
          * @brief Create a nearest-neighbor sampler (no filtering)
          * @param device The logical device
          * @return Shared pointer to the created sampler
