@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Core/Event.h"
+#include "Core/EventDispatcher.h"
 #include "Core/Types.h"
 
 #include <string>
@@ -144,13 +146,47 @@ namespace Platform
          */
         void ResetResizedFlag() { m_Resized = false; }
 
+        // =====================================================================
+        // Event System
+        // =====================================================================
+
+        /**
+         * @brief Get the event dispatcher for this window.
+         * @return Reference to the window's event dispatcher.
+         *
+         * Use this to subscribe to window events like resize, close, focus, etc.
+         *
+         * Example:
+         * @code
+         * window.GetEventDispatcher().Subscribe<Core::WindowResizeEvent>(
+         *     [](Core::WindowResizeEvent& e) {
+         *         LOG_INFO("Window resized to {}x{}", e.GetWidth(), e.GetHeight());
+         *     }
+         * );
+         * @endcode
+         */
+        Core::EventDispatcher& GetEventDispatcher() { return m_EventDispatcher; }
+
+        /**
+         * @brief Get the event dispatcher (const version).
+         */
+        const Core::EventDispatcher& GetEventDispatcher() const { return m_EventDispatcher; }
+
     private:
         GLFWwindow* m_Window = nullptr;
         uint32_t m_Width = 0;
         uint32_t m_Height = 0;
         bool m_Resized = false;
         ResizeCallback m_ResizeCallback;
+        Core::EventDispatcher m_EventDispatcher;
 
         static void FramebufferResizeCallback(GLFWwindow* window, int width, int height);
+        static void WindowCloseCallback(GLFWwindow* window);
+        static void WindowFocusCallback(GLFWwindow* window, int focused);
+        static void WindowIconifyCallback(GLFWwindow* window, int iconified);
+        static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
+        static void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
+        static void CursorPosCallback(GLFWwindow* window, double xpos, double ypos);
+        static void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
     };
 }

@@ -5,6 +5,8 @@
  * Renders a 3D model loaded from glTF format using Vulkan.
  */
 
+#include "Core/Event.h"
+#include "Core/EventDispatcher.h"
 #include "Core/Log.h"
 #include "Core/Timer.h"
 #include "Platform/FileDialog.h"
@@ -617,14 +619,18 @@ int main()
     LOG_INFO("Controls: WASD to move, Mouse to look, ESC to exit");
 
     bool framebufferResized = false;
-    window.SetResizeCallback([&framebufferResized, &camera](uint32_t width, uint32_t height) {
-        LOG_DEBUG("Window resized to: {}x{}", width, height);
-        framebufferResized = true;
-        if (width > 0 && height > 0)
-        {
-            camera.SetAspectRatio(static_cast<float>(width) / height);
+
+    // Subscribe to window resize events using the event system
+    window.GetEventDispatcher().Subscribe<Core::WindowResizeEvent>(
+        [&framebufferResized, &camera](Core::WindowResizeEvent& e) {
+            LOG_DEBUG("Window resized to: {}x{}", e.GetWidth(), e.GetHeight());
+            framebufferResized = true;
+            if (e.GetWidth() > 0 && e.GetHeight() > 0)
+            {
+                camera.SetAspectRatio(static_cast<float>(e.GetWidth()) / e.GetHeight());
+            }
         }
-    });
+    );
 
     // Frame timing
     Core::Timer& frameTimer = Core::GetGlobalTimer();

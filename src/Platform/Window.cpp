@@ -1,4 +1,5 @@
 #include "Platform/Window.h"
+#include "Core/Event.h"
 #include "Core/Log.h"
 
 #include <cstdlib>
@@ -66,8 +67,15 @@ namespace Platform
         // Store this pointer for callbacks
         glfwSetWindowUserPointer(m_Window, this);
 
-        // Set framebuffer resize callback
+        // Set window callbacks for event dispatching
         glfwSetFramebufferSizeCallback(m_Window, FramebufferResizeCallback);
+        glfwSetWindowCloseCallback(m_Window, WindowCloseCallback);
+        glfwSetWindowFocusCallback(m_Window, WindowFocusCallback);
+        glfwSetWindowIconifyCallback(m_Window, WindowIconifyCallback);
+        glfwSetKeyCallback(m_Window, KeyCallback);
+        glfwSetMouseButtonCallback(m_Window, MouseButtonCallback);
+        glfwSetCursorPosCallback(m_Window, CursorPosCallback);
+        glfwSetScrollCallback(m_Window, ScrollCallback);
 
         ++s_WindowCount;
 
@@ -100,6 +108,7 @@ namespace Platform
         , m_Height(other.m_Height)
         , m_Resized(other.m_Resized)
         , m_ResizeCallback(std::move(other.m_ResizeCallback))
+        , m_EventDispatcher(std::move(other.m_EventDispatcher))
     {
         other.m_Window = nullptr;
         other.m_Width = 0;
@@ -128,6 +137,7 @@ namespace Platform
             m_Height = other.m_Height;
             m_Resized = other.m_Resized;
             m_ResizeCallback = std::move(other.m_ResizeCallback);
+            m_EventDispatcher = std::move(other.m_EventDispatcher);
 
             other.m_Window = nullptr;
             other.m_Width = 0;
@@ -205,6 +215,7 @@ namespace Platform
             windowInstance->m_Height = static_cast<uint32_t>(height);
             windowInstance->m_Resized = true;
 
+            // Legacy callback support
             if (windowInstance->m_ResizeCallback)
             {
                 windowInstance->m_ResizeCallback(
@@ -213,7 +224,133 @@ namespace Platform
                 );
             }
 
+            // Dispatch event to subscribers
+            Core::WindowResizeEvent event(
+                static_cast<uint32_t>(width),
+                static_cast<uint32_t>(height)
+            );
+            windowInstance->m_EventDispatcher.Dispatch(event);
+
             LOG_DEBUG("Window resized: {0}x{1}", width, height);
+        }
+    }
+
+    void Window::WindowCloseCallback(GLFWwindow* window)
+    {
+        auto* windowInstance = static_cast<Window*>(glfwGetWindowUserPointer(window));
+        if (windowInstance)
+        {
+            Core::WindowCloseEvent event;
+            windowInstance->m_EventDispatcher.Dispatch(event);
+
+            LOG_DEBUG("Window close requested");
+        }
+    }
+
+    void Window::WindowFocusCallback(GLFWwindow* window, int focused)
+    {
+        auto* windowInstance = static_cast<Window*>(glfwGetWindowUserPointer(window));
+        if (windowInstance)
+        {
+            if (focused)
+            {
+                Core::WindowFocusEvent event;
+                windowInstance->m_EventDispatcher.Dispatch(event);
+                LOG_DEBUG("Window gained focus");
+            }
+            else
+            {
+                Core::WindowLostFocusEvent event;
+                windowInstance->m_EventDispatcher.Dispatch(event);
+                LOG_DEBUG("Window lost focus");
+            }
+        }
+    }
+
+    void Window::WindowIconifyCallback(GLFWwindow* window, int iconified)
+    {
+        auto* windowInstance = static_cast<Window*>(glfwGetWindowUserPointer(window));
+        if (windowInstance)
+        {
+            if (iconified)
+            {
+                Core::WindowMinimizeEvent event;
+                windowInstance->m_EventDispatcher.Dispatch(event);
+                LOG_DEBUG("Window minimized");
+            }
+            else
+            {
+                Core::WindowRestoreEvent event;
+                windowInstance->m_EventDispatcher.Dispatch(event);
+                LOG_DEBUG("Window restored");
+            }
+        }
+    }
+
+    void Window::KeyCallback(GLFWwindow* window, int key, int /*scancode*/, int action, int mods)
+    {
+        auto* windowInstance = static_cast<Window*>(glfwGetWindowUserPointer(window));
+        if (windowInstance)
+        {
+            switch (action)
+            {
+            case GLFW_PRESS:
+            {
+                Core::KeyPressEvent event(key, mods);
+                windowInstance->m_EventDispatcher.Dispatch(event);
+                break;
+            }
+            case GLFW_RELEASE:
+            {
+                Core::KeyReleaseEvent event(key, mods);
+                windowInstance->m_EventDispatcher.Dispatch(event);
+                break;
+            }
+            case GLFW_REPEAT:
+            {
+                Core::KeyRepeatEvent event(key, mods);
+                windowInstance->m_EventDispatcher.Dispatch(event);
+                break;
+            }
+            }
+        }
+    }
+
+    void Window::MouseButtonCallback(GLFWwindow* window, int button, int action, int /*mods*/)
+    {
+        auto* windowInstance = static_cast<Window*>(glfwGetWindowUserPointer(window));
+        if (windowInstance)
+        {
+            if (action == GLFW_PRESS)
+            {
+                Core::MouseButtonPressEvent event(button);
+                windowInstance->m_EventDispatcher.Dispatch(event);
+            }
+            else if (action == GLFW_RELEASE)
+            {
+                Core::MouseButtonReleaseEvent event(button);
+                windowInstance->m_EventDispatcher.Dispatch(event);
+            }
+        }
+    }
+
+    void Window::CursorPosCallback(GLFWwindow* window, double xpos, double ypos)
+    {
+        auto* windowInstance = static_cast<Window*>(glfwGetWindowUserPointer(window));
+        if (windowInstance)
+        {
+            Core::MouseMoveEvent event(xpos, ypos);
+            windowInstance->m_EventDispatcher.Dispatch(event);
+        }
+    }
+
+    void Window::ScrollCallback(GLFWwindow* window, double xoffset, double yoffset)
+    {
+        auto* windowInstance = static_cast<Window*>(glfwGetWindowUserPointer(window));
+        if (windowInstance)
+        {
+            Core::MouseScrollEvent event(xoffset, yoffset);
+            windowInstance->m_EventDispatcher.Dispatch(event);
         }
     }
 }
