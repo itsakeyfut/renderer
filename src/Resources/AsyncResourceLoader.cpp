@@ -81,14 +81,15 @@ void AsyncResourceLoader::LoadTextureAsync(
         return;
     }
 
-    // Check if already loading
+    // Check if already loading - if so, queue callback for later notification
     {
         std::lock_guard<std::mutex> lock(m_RequestsMutex);
         if (m_ActiveRequests.find(path) != m_ActiveRequests.end()) {
-            LOG_DEBUG("Texture already loading: {}", path);
-            // Don't start a new load, but don't call the callback either
-            // The existing load will complete and the callback won't be called
-            // This is a simple deduplication strategy
+            LOG_DEBUG("Texture already loading, queuing callback: {}", path);
+            // Store callback to be invoked when the existing load completes
+            if (callback) {
+                m_PendingTextureCallbacks[path].push_back(std::move(callback));
+            }
             return;
         }
 
@@ -135,14 +136,13 @@ std::future<TextureHandle> AsyncResourceLoader::LoadTextureAsync(
         return future;
     }
 
-    // Check if already loading
+    // Check if already loading - if so, queue promise for later notification
     {
         std::lock_guard<std::mutex> lock(m_RequestsMutex);
         if (m_ActiveRequests.find(path) != m_ActiveRequests.end()) {
-            LOG_DEBUG("Texture already loading: {}", path);
-            // Return a future that will resolve to an invalid handle
-            // A more sophisticated implementation might share the future
-            promise->set_value(TextureHandle());
+            LOG_DEBUG("Texture already loading, queuing promise: {}", path);
+            // Store promise to be fulfilled when the existing load completes
+            m_PendingTexturePromises[path].push_back(promise);
             return future;
         }
 
@@ -254,11 +254,15 @@ void AsyncResourceLoader::LoadModelAsync(
         return;
     }
 
-    // Check if already loading
+    // Check if already loading - if so, queue callback for later notification
     {
         std::lock_guard<std::mutex> lock(m_RequestsMutex);
         if (m_ActiveRequests.find(path) != m_ActiveRequests.end()) {
-            LOG_DEBUG("Model already loading: {}", path);
+            LOG_DEBUG("Model already loading, queuing callback: {}", path);
+            // Store callback to be invoked when the existing load completes
+            if (callback) {
+                m_PendingModelCallbacks[path].push_back(std::move(callback));
+            }
             return;
         }
 
@@ -305,12 +309,13 @@ std::future<ModelHandle> AsyncResourceLoader::LoadModelAsync(
         return future;
     }
 
-    // Check if already loading
+    // Check if already loading - if so, queue promise for later notification
     {
         std::lock_guard<std::mutex> lock(m_RequestsMutex);
         if (m_ActiveRequests.find(path) != m_ActiveRequests.end()) {
-            LOG_DEBUG("Model already loading: {}", path);
-            promise->set_value(ModelHandle());
+            LOG_DEBUG("Model already loading, queuing promise: {}", path);
+            // Store promise to be fulfilled when the existing load completes
+            m_PendingModelPromises[path].push_back(promise);
             return future;
         }
 
@@ -428,27 +433,57 @@ size_t AsyncResourceLoader::ProcessCompletedLoads(size_t maxProcessCount)
             m_CompletedTextures.pop();
         }
 
-        // Remove from active requests
-        RemoveRequest(textureResult.Path);
+        // Remove from active requests and get any pending callbacks/promises
+        std::vector<TextureLoadCallback> pendingCallbacks;
+        std::vector<std::shared_ptr<std::promise<TextureHandle>>> pendingPromises;
+        {
+            std::lock_guard<std::mutex> lock(m_RequestsMutex);
+            m_ActiveRequests.erase(textureResult.Path);
+
+            // Extract pending callbacks for this path
+            auto cbIt = m_PendingTextureCallbacks.find(textureResult.Path);
+            if (cbIt != m_PendingTextureCallbacks.end()) {
+                pendingCallbacks = std::move(cbIt->second);
+                m_PendingTextureCallbacks.erase(cbIt);
+            }
+
+            // Extract pending promises for this path
+            auto promIt = m_PendingTexturePromises.find(textureResult.Path);
+            if (promIt != m_PendingTexturePromises.end()) {
+                pendingPromises = std::move(promIt->second);
+                m_PendingTexturePromises.erase(promIt);
+            }
+        }
 
         TextureHandle handle;
         if (textureResult.Success && textureResult.Texture) {
-            // The texture is already loaded. Use ResourceManager to cache it.
-            // Note: In a full implementation, ResourceManager would have an AddTexture()
-            // method to add pre-loaded resources directly. For now, we use LoadTexture
-            // which will load it again (but quickly from disk cache).
+            // Register the pre-loaded texture directly without reloading from disk
             auto& rm = ResourceManager::Instance();
-            handle = rm.LoadTexture(textureResult.Path);
+            handle = rm.RegisterTexture(textureResult.Path, textureResult.Texture);
         }
 
-        // Invoke callback
+        // Invoke original callback
         if (textureResult.Callback) {
             textureResult.Callback(handle, textureResult.Success);
         }
 
-        // Fulfill promise
+        // Fulfill original promise
         if (textureResult.Promise) {
             textureResult.Promise->set_value(handle);
+        }
+
+        // Invoke all pending callbacks (from duplicate requests)
+        for (auto& cb : pendingCallbacks) {
+            if (cb) {
+                cb(handle, textureResult.Success);
+            }
+        }
+
+        // Fulfill all pending promises (from duplicate requests)
+        for (auto& prom : pendingPromises) {
+            if (prom) {
+                prom->set_value(handle);
+            }
         }
 
         processed++;
@@ -470,26 +505,57 @@ size_t AsyncResourceLoader::ProcessCompletedLoads(size_t maxProcessCount)
             m_CompletedModels.pop();
         }
 
-        // Remove from active requests
-        RemoveRequest(modelResult.Path);
+        // Remove from active requests and get any pending callbacks/promises
+        std::vector<ModelLoadCallback> pendingCallbacks;
+        std::vector<std::shared_ptr<std::promise<ModelHandle>>> pendingPromises;
+        {
+            std::lock_guard<std::mutex> lock(m_RequestsMutex);
+            m_ActiveRequests.erase(modelResult.Path);
+
+            // Extract pending callbacks for this path
+            auto cbIt = m_PendingModelCallbacks.find(modelResult.Path);
+            if (cbIt != m_PendingModelCallbacks.end()) {
+                pendingCallbacks = std::move(cbIt->second);
+                m_PendingModelCallbacks.erase(cbIt);
+            }
+
+            // Extract pending promises for this path
+            auto promIt = m_PendingModelPromises.find(modelResult.Path);
+            if (promIt != m_PendingModelPromises.end()) {
+                pendingPromises = std::move(promIt->second);
+                m_PendingModelPromises.erase(promIt);
+            }
+        }
 
         ModelHandle handle;
         if (modelResult.Success && modelResult.Model) {
-            // Add to ResourceManager
+            // Register the pre-loaded model directly without reloading from disk
             auto& rm = ResourceManager::Instance();
-
-            // For now, use synchronous loading to add to cache
-            handle = rm.LoadModel(modelResult.Path);
+            handle = rm.RegisterModel(modelResult.Path, modelResult.Model);
         }
 
-        // Invoke callback
+        // Invoke original callback
         if (modelResult.Callback) {
             modelResult.Callback(handle, modelResult.Success);
         }
 
-        // Fulfill promise
+        // Fulfill original promise
         if (modelResult.Promise) {
             modelResult.Promise->set_value(handle);
+        }
+
+        // Invoke all pending callbacks (from duplicate requests)
+        for (auto& cb : pendingCallbacks) {
+            if (cb) {
+                cb(handle, modelResult.Success);
+            }
+        }
+
+        // Fulfill all pending promises (from duplicate requests)
+        for (auto& prom : pendingPromises) {
+            if (prom) {
+                prom->set_value(handle);
+            }
         }
 
         processed++;

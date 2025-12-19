@@ -190,6 +190,18 @@ public:
     bool IsTextureValid(TextureHandle handle) const;
 
     /**
+     * @brief Registers a pre-loaded texture in the cache.
+     *
+     * Used by async loading to register textures loaded on worker threads
+     * without reloading from disk.
+     *
+     * @param path Path to associate with the texture.
+     * @param texture Pre-loaded texture resource.
+     * @return Handle to the registered texture.
+     */
+    TextureHandle RegisterTexture(const std::string& path, Core::Ref<Texture> texture);
+
+    /**
      * @brief Loads a texture asynchronously with callback.
      *
      * The texture is loaded on a background thread. The callback is invoked
@@ -261,6 +273,18 @@ public:
      * @return true if the handle refers to a valid model.
      */
     bool IsModelValid(ModelHandle handle) const;
+
+    /**
+     * @brief Registers a pre-loaded model in the cache.
+     *
+     * Used by async loading to register models loaded on worker threads
+     * without reloading from disk.
+     *
+     * @param path Path to associate with the model.
+     * @param model Pre-loaded model resource.
+     * @return Handle to the registered model.
+     */
+    ModelHandle RegisterModel(const std::string& path, Core::Ref<Model> model);
 
     /**
      * @brief Loads a model asynchronously with callback.

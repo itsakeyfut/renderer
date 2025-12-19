@@ -208,8 +208,9 @@ Core::Ref<Texture> TextureLoader::CreatePlaceholder(
     // Make sure size is power of 2 for nice checkerboard
     if ((size & (size - 1)) != 0) {
         // Round up to next power of 2
+        uint32_t originalSize = size;
         size = 1;
-        while (size < 64) size <<= 1;
+        while (size < originalSize) size <<= 1;
     }
 
     auto texture = Core::CreateRef<Texture>();

@@ -247,10 +247,17 @@ public:
     /**
      * @brief Cancel a pending load request.
      *
-     * Cannot cancel loads that are already in progress.
+     * Only cancels loads that are still in the Pending status. Loads that
+     * have already been submitted to the thread pool and are in Loading status
+     * cannot be cancelled - the worker thread will still execute the load,
+     * but callbacks will not be invoked for cancelled requests.
+     *
+     * @note This method removes the request from tracking but does not stop
+     *       already-submitted tasks from executing. The loaded resource will
+     *       simply be discarded when it completes.
      *
      * @param path Resource path to cancel.
-     * @return true if the request was cancelled.
+     * @return true if the request was cancelled (was in Pending status).
      */
     bool CancelLoad(const std::string& path);
 
@@ -385,6 +392,15 @@ private:
     // Active load requests tracking
     std::unordered_map<std::string, LoadRequestInfo> m_ActiveRequests;
     mutable std::mutex m_RequestsMutex;
+
+    // Pending callbacks for duplicate load requests (texture)
+    // When multiple callers request the same texture, all callbacks are stored here
+    std::unordered_map<std::string, std::vector<TextureLoadCallback>> m_PendingTextureCallbacks;
+    std::unordered_map<std::string, std::vector<std::shared_ptr<std::promise<TextureHandle>>>> m_PendingTexturePromises;
+
+    // Pending callbacks for duplicate load requests (model)
+    std::unordered_map<std::string, std::vector<ModelLoadCallback>> m_PendingModelCallbacks;
+    std::unordered_map<std::string, std::vector<std::shared_ptr<std::promise<ModelHandle>>>> m_PendingModelPromises;
 
     // Progress callback
     ProgressCallback m_ProgressCallback;

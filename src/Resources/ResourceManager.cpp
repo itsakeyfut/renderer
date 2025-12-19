@@ -107,6 +107,30 @@ bool ResourceManager::IsTextureValid(TextureHandle handle) const
     return m_TexturePool.IsValid(handle);
 }
 
+TextureHandle ResourceManager::RegisterTexture(const std::string& path, Core::Ref<Texture> texture)
+{
+    if (!texture) {
+        LOG_ERROR("Cannot register null texture for path: {}", path);
+        return TextureHandle();
+    }
+
+    // Check cache first - if already exists, return existing handle
+    auto it = m_TextureCache.find(path);
+    if (it != m_TextureCache.end() && m_TexturePool.IsValid(it->second)) {
+        m_TexturePool.AddRef(it->second);
+        m_Stats.TextureCacheHits++;
+        LOG_DEBUG("Texture already registered: {}", path);
+        return it->second;
+    }
+
+    // Register the pre-loaded texture
+    TextureHandle handle = m_TexturePool.Add(texture);
+    m_TextureCache[path] = handle;
+
+    LOG_DEBUG("Registered pre-loaded texture: {} (handle index={})", path, handle.GetIndex());
+    return handle;
+}
+
 // =============================================================================
 // Model Management
 // =============================================================================
@@ -179,6 +203,30 @@ void ResourceManager::ReleaseModel(ModelHandle handle)
 bool ResourceManager::IsModelValid(ModelHandle handle) const
 {
     return m_ModelPool.IsValid(handle);
+}
+
+ModelHandle ResourceManager::RegisterModel(const std::string& path, Core::Ref<Model> model)
+{
+    if (!model) {
+        LOG_ERROR("Cannot register null model for path: {}", path);
+        return ModelHandle();
+    }
+
+    // Check cache first - if already exists, return existing handle
+    auto it = m_ModelCache.find(path);
+    if (it != m_ModelCache.end() && m_ModelPool.IsValid(it->second)) {
+        m_ModelPool.AddRef(it->second);
+        m_Stats.ModelCacheHits++;
+        LOG_DEBUG("Model already registered: {}", path);
+        return it->second;
+    }
+
+    // Register the pre-loaded model
+    ModelHandle handle = m_ModelPool.Add(model);
+    m_ModelCache[path] = handle;
+
+    LOG_DEBUG("Registered pre-loaded model: {} (handle index={})", path, handle.GetIndex());
+    return handle;
 }
 
 // =============================================================================
