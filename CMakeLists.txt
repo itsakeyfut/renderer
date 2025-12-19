@@ -242,6 +242,8 @@ set(RHI_SOURCES
     src/RHI/RHISemaphore.cpp
     src/RHI/RHIShader.cpp
     src/RHI/RHISwapchain.cpp
+    src/RHI/RHITexture.cpp
+    src/RHI/stb_impl.cpp
 )
 
 set(RHI_HEADERS
@@ -262,10 +264,12 @@ set(RHI_HEADERS
     src/RHI/RHISemaphore.h
     src/RHI/RHIShader.h
     src/RHI/RHISwapchain.h
+    src/RHI/RHITexture.h
 )
 
 add_library(RHI STATIC ${RHI_SOURCES} ${RHI_HEADERS})
 target_include_directories(RHI PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(RHI PRIVATE ${tinygltf_SOURCE_DIR})  # For stb_image.h
 target_link_libraries(RHI PUBLIC Core Platform ${VULKAN_TARGET} GPUOpen::VulkanMemoryAllocator)
 
 # Resources library
@@ -456,6 +460,11 @@ if(BUILD_TESTS)
     add_executable(TestRHIDescriptor tests/TestRHIDescriptor.cpp)
     target_link_libraries(TestRHIDescriptor PRIVATE RHI Resources Platform Core GTest::gtest_main)
     gtest_discover_tests(TestRHIDescriptor)
+
+    # RHI Texture test
+    add_executable(TestRHITexture tests/TestRHITexture.cpp)
+    target_link_libraries(TestRHITexture PRIVATE RHI Platform Core GTest::gtest_main)
+    gtest_discover_tests(TestRHITexture)
 
     # ThreadPool test
     add_executable(TestThreadPool tests/TestThreadPool.cpp)

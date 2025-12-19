@@ -8,7 +8,7 @@
 #include "Core/Assert.h"
 #include "Core/Log.h"
 
-// stb_image is already implemented in ModelLoader.cpp via tinygltf
+// stb_image implementation is in RHI/stb_impl.cpp
 // Just include the header here
 #ifdef _MSC_VER
 #pragma warning(push, 0)
