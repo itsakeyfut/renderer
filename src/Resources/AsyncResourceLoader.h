@@ -31,8 +31,9 @@ namespace RHI {
 namespace Resources {
 
 // Forward declarations
-struct Texture;  // Defined in TextureLoader.h
 class Model;
+struct Texture;
+struct TextureData;
 
 /**
  * @brief Load request status.
@@ -330,10 +331,13 @@ private:
 
     /**
      * @brief Completed load result for texture.
+     *
+     * Contains CPU-loaded texture data that will be uploaded to GPU
+     * on the main thread during ProcessCompletedLoads().
      */
     struct TextureLoadResult {
         std::string Path;
-        Core::Ref<Texture> Texture;
+        Core::Ref<TextureData> Data;  ///< CPU-loaded pixel data (GPU upload happens on main thread)
         TextureLoadCallback Callback;
         std::shared_ptr<std::promise<TextureHandle>> Promise;
         bool Success;

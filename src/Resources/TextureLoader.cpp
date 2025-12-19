@@ -27,24 +27,25 @@
 #endif
 
 #include <algorithm>
+#include <cstring>
 #include <filesystem>
 #include <vector>
 
 namespace Resources
 {
 
-Core::Ref<Texture> TextureLoader::Load(
-    const Core::Ref<RHI::RHIDevice>& device,
+TextureData TextureLoader::LoadCPU(
     const std::string& filepath,
     const TextureLoadOptions& options)
 {
-    ASSERT(device != nullptr);
+    TextureData data;
+    data.Path = filepath;
 
     // Check file exists
     if (!std::filesystem::exists(filepath))
     {
         LOG_ERROR("Texture file not found: {}", filepath);
-        return nullptr;
+        return data;  // Returns invalid data
     }
 
     // Configure stb_image
@@ -62,52 +63,102 @@ Core::Ref<Texture> TextureLoader::Load(
     if (!pixels)
     {
         LOG_ERROR("Failed to load texture: {} - {}", filepath, stbi_failure_reason());
+        return data;  // Returns invalid data
+    }
+
+    // Copy pixel data to vector
+    size_t imageSize = static_cast<size_t>(width) * height * 4;
+    data.Pixels.resize(imageSize);
+    std::memcpy(data.Pixels.data(), pixels, imageSize);
+
+    // Free stb_image's allocation
+    stbi_image_free(pixels);
+
+    data.Width = static_cast<uint32_t>(width);
+    data.Height = static_cast<uint32_t>(height);
+    data.Channels = 4;  // We forced RGBA
+    data.Format = options.SRGB ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
+
+    if (options.GenerateMipmaps)
+    {
+        data.MipLevels = static_cast<uint32_t>(
+            std::floor(std::log2(std::max(width, height)))) + 1;
+    }
+    else
+    {
+        data.MipLevels = 1;
+    }
+
+    LOG_DEBUG("Loaded texture data (CPU): {} ({}x{}, {} mips)",
+              filepath, width, height, data.MipLevels);
+
+    return data;
+}
+
+Core::Ref<Texture> TextureLoader::CreateFromData(
+    const Core::Ref<RHI::RHIDevice>& device,
+    const TextureData& data)
+{
+    ASSERT(device != nullptr);
+
+    if (!data.IsValid())
+    {
+        LOG_ERROR("Cannot create texture from invalid data");
         return nullptr;
     }
 
     // Create texture
     auto texture = Core::CreateRef<Texture>();
-    texture->Width = static_cast<uint32_t>(width);
-    texture->Height = static_cast<uint32_t>(height);
-    texture->Channels = 4;  // We forced RGBA
-    texture->Path = filepath;
+    texture->Width = data.Width;
+    texture->Height = data.Height;
+    texture->Channels = data.Channels;
+    texture->Path = data.Path;
 
     // Create RHI image
     RHI::ImageDesc imageDesc;
-    imageDesc.Width = texture->Width;
-    imageDesc.Height = texture->Height;
-    imageDesc.Format = options.SRGB ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
+    imageDesc.Width = data.Width;
+    imageDesc.Height = data.Height;
+    imageDesc.Format = data.Format;
     imageDesc.Usage = RHI::ImageUsage::Texture;
-    imageDesc.GenerateMipmaps = options.GenerateMipmaps;
+    imageDesc.MipLevels = data.MipLevels;
+    imageDesc.GenerateMipmaps = (data.MipLevels > 1);
 
-    if (options.GenerateMipmaps)
-    {
-        // Calculate mip levels
-        imageDesc.MipLevels = static_cast<uint32_t>(
-            std::floor(std::log2(std::max(width, height)))) + 1;
-    }
-
-    VkDeviceSize imageSize = static_cast<VkDeviceSize>(width * height * 4);
+    VkDeviceSize imageSize = static_cast<VkDeviceSize>(data.Pixels.size());
 
     texture->Image = RHI::RHIImage::CreateWithData(
         device,
         imageDesc,
-        pixels,
+        data.Pixels.data(),
         imageSize);
-
-    // Free CPU-side image data
-    stbi_image_free(pixels);
 
     if (!texture->Image)
     {
-        LOG_ERROR("Failed to create GPU image for texture: {}", filepath);
+        LOG_ERROR("Failed to create GPU image for texture: {}", data.Path);
         return nullptr;
     }
 
-    LOG_DEBUG("Loaded texture: {} ({}x{}, {} mips)",
-              filepath, width, height, imageDesc.MipLevels);
+    LOG_DEBUG("Created GPU texture: {} ({}x{}, {} mips)",
+              data.Path, data.Width, data.Height, data.MipLevels);
 
     return texture;
+}
+
+Core::Ref<Texture> TextureLoader::Load(
+    const Core::Ref<RHI::RHIDevice>& device,
+    const std::string& filepath,
+    const TextureLoadOptions& options)
+{
+    ASSERT(device != nullptr);
+
+    // Load CPU data first
+    TextureData data = LoadCPU(filepath, options);
+    if (!data.IsValid())
+    {
+        return nullptr;
+    }
+
+    // Create GPU texture from data
+    return CreateFromData(device, data);
 }
 
 Core::Ref<Texture> TextureLoader::CreateSolidColor(

@@ -208,7 +208,7 @@ void AsyncResourceLoader::ExecuteTextureLoad(TextureLoadTask task)
         // Notify failure
         TextureLoadResult result{
             task.Path,
-            nullptr,
+            nullptr,  // No data
             std::move(task.Callback),
             task.Promise,
             false
@@ -222,32 +222,36 @@ void AsyncResourceLoader::ExecuteTextureLoad(TextureLoadTask task)
     MarkAsLoading(task.Path);
     UpdateProgress(task.Path, 0.1f);
 
-    LOG_DEBUG("Loading texture: {}", task.Path);
+    LOG_DEBUG("Loading texture (CPU): {}", task.Path);
 
-    // Load the texture on this worker thread
+    // Load the texture data on this worker thread (CPU-only, no GPU operations)
     TextureLoadOptions options;
     options.GenerateMipmaps = task.Desc.GenerateMipmaps;
     options.SRGB = task.Desc.sRGB;
 
     UpdateProgress(task.Path, 0.3f);
 
-    Core::Ref<Texture> texture = TextureLoader::Load(m_Device, task.Path, options);
+    // CPU-only loading - GPU upload will happen on main thread
+    TextureData loadedData = TextureLoader::LoadCPU(task.Path, options);
 
     UpdateProgress(task.Path, 0.9f);
 
-    bool success = (texture != nullptr);
+    bool success = loadedData.IsValid();
+    Core::Ref<TextureData> dataPtr;
 
     if (success) {
-        LOG_DEBUG("Texture loaded successfully: {}", task.Path);
+        // Move data to shared_ptr for transfer to main thread
+        dataPtr = Core::CreateRef<TextureData>(std::move(loadedData));
+        LOG_DEBUG("Texture data loaded successfully (CPU): {}", task.Path);
     }
     else {
-        LOG_WARN("Failed to load texture: {}", task.Path);
+        LOG_WARN("Failed to load texture data: {}", task.Path);
     }
 
-    // Queue the result for main thread processing
+    // Queue the result for main thread processing (GPU upload happens there)
     TextureLoadResult result{
         task.Path,
-        texture,
+        dataPtr,
         std::move(task.Callback),
         task.Promise,
         success
@@ -481,10 +485,20 @@ size_t AsyncResourceLoader::ProcessCompletedLoads(size_t maxProcessCount)
         }
 
         TextureHandle handle;
-        if (textureResult.Success && textureResult.Texture) {
-            // Register the pre-loaded texture directly without reloading from disk
-            auto& rm = ResourceManager::Instance();
-            handle = rm.RegisterTexture(textureResult.Path, textureResult.Texture);
+        if (textureResult.Success && textureResult.Data && textureResult.Data->IsValid()) {
+            // Create GPU texture on main thread from CPU-loaded data
+            Core::Ref<Texture> texture = TextureLoader::CreateFromData(
+                m_Device, *textureResult.Data);
+
+            if (texture) {
+                // Register the texture in ResourceManager
+                auto& rm = ResourceManager::Instance();
+                handle = rm.RegisterTexture(textureResult.Path, texture);
+            }
+            else {
+                LOG_ERROR("Failed to upload texture to GPU: {}", textureResult.Path);
+                textureResult.Success = false;
+            }
         }
 
         // Invoke original callback
