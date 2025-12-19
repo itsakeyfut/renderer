@@ -270,8 +270,11 @@ target_link_libraries(Resources PUBLIC Core glm::glm ${VULKAN_HEADERS_TARGET})
 
 # Scene library (header-only for now)
 set(SCENE_HEADERS
+    src/Scene/Camera.h
     src/Scene/Entity.h
+    src/Scene/FPSCameraController.h
     src/Scene/Light.h
+    src/Scene/OrbitCameraController.h
     src/Scene/Scene.h
     src/Scene/Transform.h
 )
@@ -279,7 +282,7 @@ set(SCENE_HEADERS
 add_library(Scene INTERFACE)
 target_sources(Scene INTERFACE ${SCENE_HEADERS})
 target_include_directories(Scene INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(Scene INTERFACE Core Resources glm::glm)
+target_link_libraries(Scene INTERFACE Core Platform Resources glm::glm)
 
 # Renderer library
 set(RENDERER_SOURCES
@@ -393,6 +396,11 @@ if(BUILD_TESTS)
     add_executable(TestScene tests/TestScene.cpp)
     target_link_libraries(TestScene PRIVATE Scene Resources Core glm::glm GTest::gtest_main)
     gtest_discover_tests(TestScene)
+
+    # Camera test
+    add_executable(TestCamera tests/TestCamera.cpp)
+    target_link_libraries(TestCamera PRIVATE Scene Resources Core glm::glm GTest::gtest_main)
+    gtest_discover_tests(TestCamera)
 
     # ResourceManager test
     add_executable(TestResourceManager tests/TestResourceManager.cpp)
