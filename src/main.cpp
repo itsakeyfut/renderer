@@ -7,6 +7,7 @@
 
 #include "Core/Log.h"
 #include "Core/Timer.h"
+#include "Platform/FileDialog.h"
 #include "Platform/Input.h"
 #include "Platform/Window.h"
 #include "RHI/RHIInstance.h"
@@ -95,6 +96,119 @@ void TransitionImageLayout(
     barrier.dstAccessMask = dstAccess;
 
     cmdBuffer->PipelineBarrier(srcStage, dstStage, {}, {}, {barrier});
+}
+
+/**
+ * @brief Load a new model and recreate GPU buffers.
+ * @param filepath Path to the glTF/glb file.
+ * @param device RHI device for buffer creation.
+ * @param loadedModel Reference to model pointer (will be replaced).
+ * @param vertexBuffer Reference to vertex buffer (will be recreated).
+ * @param indexBuffer Reference to index buffer (will be recreated).
+ * @param totalIndexCount Reference to total index count (will be updated).
+ * @param camera Reference to camera (position will be updated).
+ * @return true on success, false on failure.
+ */
+bool LoadNewModel(
+    const std::string& filepath,
+    const Core::Ref<RHI::RHIDevice>& device,
+    Core::Ref<Resources::Model>& loadedModel,
+    Core::Ref<RHI::RHIBuffer>& vertexBuffer,
+    Core::Ref<RHI::RHIBuffer>& indexBuffer,
+    uint32_t& totalIndexCount,
+    Scene::Camera& camera)
+{
+    // Wait for GPU to finish using current buffers
+    device->WaitIdle();
+
+    // Load new model
+    Resources::ModelLoadOptions options;
+    options.CalculateTangents = true;
+
+    auto newModel = Resources::ModelLoader::LoadGLTF(filepath, options);
+    if (!newModel || newModel->GetMeshCount() == 0)
+    {
+        LOG_ERROR("Failed to load model: {}", filepath);
+        return false;
+    }
+
+    // Merge all meshes into single buffers
+    std::vector<Resources::Vertex> mergedVertices;
+    std::vector<uint32_t> mergedIndices;
+
+    for (size_t meshIdx = 0; meshIdx < newModel->GetMeshCount(); ++meshIdx)
+    {
+        const auto& mesh = newModel->GetMesh(meshIdx);
+        uint32_t vertexOffset = static_cast<uint32_t>(mergedVertices.size());
+
+        mergedVertices.insert(mergedVertices.end(), mesh.Vertices.begin(), mesh.Vertices.end());
+
+        for (uint32_t index : mesh.Indices)
+        {
+            mergedIndices.push_back(vertexOffset + index);
+        }
+    }
+
+    // Create new vertex buffer (keep old buffers until success)
+    RHI::BufferDesc vertexDesc;
+    vertexDesc.Size = sizeof(Resources::Vertex) * mergedVertices.size();
+    vertexDesc.Usage = RHI::BufferUsage::Vertex;
+    vertexDesc.Memory = RHI::MemoryUsage::CpuToGpu;
+    vertexDesc.DebugName = "Model Vertex Buffer";
+
+    auto newVertexBuffer = RHI::RHIBuffer::Create(device, vertexDesc);
+    if (!newVertexBuffer)
+    {
+        LOG_ERROR("Failed to create vertex buffer for new model");
+        return false;
+    }
+    newVertexBuffer->SetData(mergedVertices.data(), vertexDesc.Size);
+
+    // Create new index buffer
+    RHI::BufferDesc indexDesc;
+    indexDesc.Size = sizeof(uint32_t) * mergedIndices.size();
+    indexDesc.Usage = RHI::BufferUsage::Index;
+    indexDesc.Memory = RHI::MemoryUsage::CpuToGpu;
+    indexDesc.DebugName = "Model Index Buffer";
+
+    auto newIndexBuffer = RHI::RHIBuffer::Create(device, indexDesc);
+    if (!newIndexBuffer)
+    {
+        LOG_ERROR("Failed to create index buffer for new model");
+        return false;
+    }
+    newIndexBuffer->SetData(mergedIndices.data(), indexDesc.Size);
+
+    // Success - now safe to replace old buffers with new ones
+    vertexBuffer = std::move(newVertexBuffer);
+    indexBuffer = std::move(newIndexBuffer);
+
+    // Update total index count
+    totalIndexCount = static_cast<uint32_t>(mergedIndices.size());
+
+    // Update camera position for new model bounds
+    const auto& bounds = newModel->GetBounds();
+    float centerArr[3], extentArr[3];
+    bounds.GetCenter(centerArr);
+    bounds.GetExtents(extentArr);
+    glm::vec3 center(centerArr[0], centerArr[1], centerArr[2]);
+    glm::vec3 extent(extentArr[0], extentArr[1], extentArr[2]);
+    float maxExtent = glm::max(extent.x, glm::max(extent.y, extent.z));
+    float cameraDistance = maxExtent * 5.0f;
+
+    camera.SetPosition(center + glm::vec3(0.0f, maxExtent * 0.5f, cameraDistance));
+    camera.LookAt(center);
+
+    // Assign new model
+    loadedModel = newModel;
+
+    LOG_INFO("Model loaded: {} ({} meshes, {} vertices, {} triangles)",
+             loadedModel->GetName(),
+             loadedModel->GetMeshCount(),
+             loadedModel->GetTotalVertexCount(),
+             loadedModel->GetTotalIndexCount() / 3);
+
+    return true;
 }
 
 int main()
@@ -248,13 +362,29 @@ int main()
              loadedModel->GetTotalIndexCount() / 3);
 
     // =========================================================================
-    // Model Buffers
+    // Model Buffers (merge all meshes into single buffer)
     // =========================================================================
-    const auto& mesh = loadedModel->GetMesh(0);
+    std::vector<Resources::Vertex> mergedVertices;
+    std::vector<uint32_t> mergedIndices;
+
+    for (size_t meshIdx = 0; meshIdx < loadedModel->GetMeshCount(); ++meshIdx)
+    {
+        const auto& mesh = loadedModel->GetMesh(meshIdx);
+        uint32_t vertexOffset = static_cast<uint32_t>(mergedVertices.size());
+
+        // Add vertices
+        mergedVertices.insert(mergedVertices.end(), mesh.Vertices.begin(), mesh.Vertices.end());
+
+        // Add indices with offset
+        for (uint32_t index : mesh.Indices)
+        {
+            mergedIndices.push_back(vertexOffset + index);
+        }
+    }
 
     // Vertex buffer
     RHI::BufferDesc vertexBufferDesc;
-    vertexBufferDesc.Size = sizeof(Resources::Vertex) * mesh.Vertices.size();
+    vertexBufferDesc.Size = sizeof(Resources::Vertex) * mergedVertices.size();
     vertexBufferDesc.Usage = RHI::BufferUsage::Vertex;
     vertexBufferDesc.Memory = RHI::MemoryUsage::CpuToGpu;
     vertexBufferDesc.DebugName = "Model Vertex Buffer";
@@ -265,12 +395,12 @@ int main()
         LOG_FATAL("Failed to create vertex buffer!");
         return EXIT_FAILURE;
     }
-    vertexBuffer->SetData(mesh.Vertices.data(), vertexBufferDesc.Size);
+    vertexBuffer->SetData(mergedVertices.data(), vertexBufferDesc.Size);
     LOG_INFO("Vertex buffer created: {} bytes", vertexBufferDesc.Size);
 
     // Index buffer
     RHI::BufferDesc indexBufferDesc;
-    indexBufferDesc.Size = sizeof(uint32_t) * mesh.Indices.size();
+    indexBufferDesc.Size = sizeof(uint32_t) * mergedIndices.size();
     indexBufferDesc.Usage = RHI::BufferUsage::Index;
     indexBufferDesc.Memory = RHI::MemoryUsage::CpuToGpu;
     indexBufferDesc.DebugName = "Model Index Buffer";
@@ -281,8 +411,11 @@ int main()
         LOG_FATAL("Failed to create index buffer!");
         return EXIT_FAILURE;
     }
-    indexBuffer->SetData(mesh.Indices.data(), indexBufferDesc.Size);
+    indexBuffer->SetData(mergedIndices.data(), indexBufferDesc.Size);
     LOG_INFO("Index buffer created: {} bytes", indexBufferDesc.Size);
+
+    // Store total index count for drawing
+    uint32_t totalIndexCount = static_cast<uint32_t>(mergedIndices.size());
 
     // =========================================================================
     // Camera and Uniform Buffers
@@ -642,9 +775,9 @@ int main()
         cameraUBOs[frameIndex]->SetData(&cameraData, sizeof(cameraData));
 
         Resources::ObjectUBO objectData;
-        // First rotate around X axis by 90 degrees to stand the model upright,
+        // First rotate around X axis by 0 degrees to stand the model upright,
         // then apply Y-axis auto-rotation
-        glm::mat4 standUpright = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+        glm::mat4 standUpright = glm::rotate(glm::mat4(1.0f), glm::radians(0.0f), glm::vec3(1.0f, 0.0f, 0.0f));
         glm::mat4 autoRotate = glm::rotate(glm::mat4(1.0f), glm::radians(rotationAngle), glm::vec3(0.0f, 1.0f, 0.0f));
         objectData.Model = autoRotate * standUpright;
         objectData.NormalMatrix = glm::transpose(glm::inverse(objectData.Model));
@@ -658,7 +791,7 @@ int main()
         stats.FrameTime = frameTimer.GetFrameTimeMs();
         stats.FPS = frameTimer.GetFPS();
         stats.DrawCalls = 1;
-        stats.TriangleCount = static_cast<uint32_t>(mesh.Indices.size() / 3);
+        stats.TriangleCount = totalIndexCount / 3;
 
         imguiRenderer->ShowStatsWindow(stats, &showStatsWindow);
 
@@ -673,6 +806,19 @@ int main()
             ImGui::Text("Camera Position: (%.1f, %.1f, %.1f)",
                         camera.GetPosition().x, camera.GetPosition().y, camera.GetPosition().z);
             ImGui::Text("Right-click to capture mouse");
+            ImGui::Separator();
+            if (ImGui::Button("Load Model..."))
+            {
+                auto filePath = Platform::FileDialog::OpenGLTFFile();
+                if (filePath.has_value())
+                {
+                    if (!LoadNewModel(filePath.value(), device, loadedModel,
+                                      vertexBuffer, indexBuffer, totalIndexCount, camera))
+                    {
+                        LOG_ERROR("Failed to load model from file dialog");
+                    }
+                }
+            }
             ImGui::End();
         }
 
@@ -748,7 +894,7 @@ int main()
             {descriptorSets[frameIndex]->GetHandle()});
         cmdBuffer->BindVertexBuffer(vertexBuffer->GetHandle());
         cmdBuffer->BindIndexBuffer(indexBuffer->GetHandle(), VK_INDEX_TYPE_UINT32);
-        cmdBuffer->DrawIndexed(static_cast<uint32_t>(mesh.Indices.size()));
+        cmdBuffer->DrawIndexed(totalIndexCount);
 
         cmdBuffer->EndRendering();
 

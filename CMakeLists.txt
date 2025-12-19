@@ -204,11 +204,13 @@ target_link_libraries(Core PUBLIC spdlog::spdlog nlohmann_json::nlohmann_json)
 
 # Platform library
 set(PLATFORM_SOURCES
+    src/Platform/FileDialog.cpp
     src/Platform/Input.cpp
     src/Platform/Window.cpp
 )
 
 set(PLATFORM_HEADERS
+    src/Platform/FileDialog.h
     src/Platform/Input.h
     src/Platform/Window.h
 )

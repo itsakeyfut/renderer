@@ -34,6 +34,11 @@
 #include "Core/Assert.h"
 #include "Core/Log.h"
 
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/quaternion.hpp>
+
 #include <algorithm>
 #include <cmath>
 #include <unordered_set>
@@ -325,6 +330,105 @@ void CalculateTangents(
 }
 
 /**
+ * @brief Extract transform matrix from a glTF node.
+ *
+ * Handles both matrix and TRS (translation/rotation/scale) representations.
+ *
+ * @param node The glTF node.
+ * @return The local transform matrix.
+ */
+glm::mat4 GetNodeTransform(const tinygltf::Node& node)
+{
+    glm::mat4 transform(1.0f);
+
+    if (node.matrix.size() == 16) {
+        // Use pre-computed matrix (column-major order)
+        for (int i = 0; i < 16; ++i) {
+            transform[i / 4][i % 4] = static_cast<float>(node.matrix[i]);
+        }
+    }
+    else {
+        // Build from TRS components
+        glm::vec3 translation(0.0f);
+        if (node.translation.size() == 3) {
+            translation = glm::vec3(
+                static_cast<float>(node.translation[0]),
+                static_cast<float>(node.translation[1]),
+                static_cast<float>(node.translation[2]));
+        }
+
+        glm::quat rotation(1.0f, 0.0f, 0.0f, 0.0f);  // Identity quaternion (w, x, y, z)
+        if (node.rotation.size() == 4) {
+            // tinygltf stores as [x, y, z, w], GLM constructor is (w, x, y, z)
+            rotation = glm::quat(
+                static_cast<float>(node.rotation[3]),  // w
+                static_cast<float>(node.rotation[0]),  // x
+                static_cast<float>(node.rotation[1]),  // y
+                static_cast<float>(node.rotation[2])); // z
+        }
+
+        glm::vec3 scale(1.0f);
+        if (node.scale.size() == 3) {
+            scale = glm::vec3(
+                static_cast<float>(node.scale[0]),
+                static_cast<float>(node.scale[1]),
+                static_cast<float>(node.scale[2]));
+        }
+
+        // Build matrix: T * R * S
+        glm::mat4 T = glm::translate(glm::mat4(1.0f), translation);
+        glm::mat4 R = glm::toMat4(rotation);
+        glm::mat4 S = glm::scale(glm::mat4(1.0f), scale);
+        transform = T * R * S;
+    }
+
+    return transform;
+}
+
+/**
+ * @brief Apply transform to all vertices in a mesh.
+ *
+ * Transforms positions, normals, and tangents.
+ *
+ * @param vertices The vertices to transform.
+ * @param transform The transform matrix.
+ */
+void TransformMeshVertices(
+    std::vector<Vertex>& vertices,
+    const glm::mat4& transform)
+{
+    // Skip if identity matrix
+    if (transform == glm::mat4(1.0f)) {
+        return;
+    }
+
+    // Normal matrix = transpose of inverse
+    glm::mat4 normalMatrix = glm::transpose(glm::inverse(transform));
+
+    for (auto& vertex : vertices) {
+        // Transform position (w = 1.0 for points)
+        vertex.Position = glm::vec3(transform * glm::vec4(vertex.Position, 1.0f));
+
+        // Transform normal (w = 0.0 for directions)
+        glm::vec3 transformedNormal = glm::vec3(normalMatrix * glm::vec4(vertex.Normal, 0.0f));
+        float normalLength = glm::length(transformedNormal);
+        if (normalLength > 0.0001f) {
+            vertex.Normal = transformedNormal / normalLength;
+        }
+
+        // Transform tangent (preserve handedness in w component)
+        float handedness = vertex.Tangent.w;
+        glm::vec3 tangentDir = glm::vec3(vertex.Tangent);
+        glm::vec3 transformedTangent = glm::vec3(normalMatrix * glm::vec4(tangentDir, 0.0f));
+        float tangentLength = glm::length(transformedTangent);
+        if (tangentLength > 0.0001f) {
+            transformedTangent /= tangentLength;
+        }
+        vertex.Tangent = glm::vec4(transformedTangent, handedness);
+    }
+}
+
+/**
  * @brief Process a single glTF primitive into a mesh.
  *
  * @param model The tinygltf model.
@@ -449,17 +553,25 @@ bool ProcessPrimitive(
 /**
  * @brief Process a glTF node recursively.
  *
+ * Extracts mesh data and applies hierarchical transforms to vertices.
+ *
  * @param model The tinygltf model.
  * @param node The node to process.
+ * @param parentTransform Accumulated transform from parent nodes.
  * @param options Loading options.
  * @param outModel Output model.
  */
 void ProcessNode(
     const tinygltf::Model& model,
     const tinygltf::Node& node,
+    const glm::mat4& parentTransform,
     const ModelLoadOptions& options,
     Model& outModel)
 {
+    // Calculate this node's world transform
+    glm::mat4 localTransform = GetNodeTransform(node);
+    glm::mat4 worldTransform = parentTransform * localTransform;
+
     // Process mesh if present
     if (node.mesh >= 0 && node.mesh < static_cast<int>(model.meshes.size())) {
         const auto& gltfMesh = model.meshes[node.mesh];
@@ -469,16 +581,18 @@ void ProcessNode(
             mesh.Name = gltfMesh.name;
 
             if (ProcessPrimitive(model, primitive, options, mesh)) {
+                // Apply world transform to vertices (bake transform)
+                TransformMeshVertices(mesh.Vertices, worldTransform);
                 outModel.AddMesh(std::move(mesh));
             }
         }
     }
 
-    // Process children
+    // Process children with accumulated transform
     for (int childIndex : node.children) {
         if (childIndex >= 0 &&
             childIndex < static_cast<int>(model.nodes.size())) {
-            ProcessNode(model, model.nodes[childIndex], options, outModel);
+            ProcessNode(model, model.nodes[childIndex], worldTransform, options, outModel);
         }
     }
 }
@@ -680,13 +794,15 @@ Core::Ref<Model> ModelLoader::LoadGLTF(
     ProcessMaterials(gltfModel, basePath, *model);
 
     // Process all scenes (or default scene)
+    const glm::mat4 identityTransform(1.0f);
+
     if (gltfModel.defaultScene >= 0 &&
         gltfModel.defaultScene < static_cast<int>(gltfModel.scenes.size())) {
         const auto& scene = gltfModel.scenes[gltfModel.defaultScene];
         for (int nodeIndex : scene.nodes) {
             if (nodeIndex >= 0 &&
                 nodeIndex < static_cast<int>(gltfModel.nodes.size())) {
-                ProcessNode(gltfModel, gltfModel.nodes[nodeIndex], options, *model);
+                ProcessNode(gltfModel, gltfModel.nodes[nodeIndex], identityTransform, options, *model);
             }
         }
     }
@@ -696,7 +812,7 @@ Core::Ref<Model> ModelLoader::LoadGLTF(
         for (int nodeIndex : scene.nodes) {
             if (nodeIndex >= 0 &&
                 nodeIndex < static_cast<int>(gltfModel.nodes.size())) {
-                ProcessNode(gltfModel, gltfModel.nodes[nodeIndex], options, *model);
+                ProcessNode(gltfModel, gltfModel.nodes[nodeIndex], identityTransform, options, *model);
             }
         }
     }
@@ -716,7 +832,7 @@ Core::Ref<Model> ModelLoader::LoadGLTF(
             if (childNodes.count(i) > 0) {
                 continue;
             }
-            ProcessNode(gltfModel, gltfModel.nodes[i], options, *model);
+            ProcessNode(gltfModel, gltfModel.nodes[i], identityTransform, options, *model);
         }
     }
 
