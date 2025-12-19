@@ -219,6 +219,77 @@ TEST_F(TransformTest, NestedHierarchy)
     EXPECT_TRUE(VecEqual(worldPos, glm::vec3(111.0f, 0.0f, 0.0f)));
 }
 
+TEST_F(TransformTest, NormalMatrixIdentity)
+{
+    Scene::Transform transform;
+
+    // With identity transform, normal matrix should also be identity
+    glm::mat4 normalMatrix = transform.GetNormalMatrix();
+    EXPECT_TRUE(MatEqual(normalMatrix, glm::mat4(1.0f)));
+}
+
+TEST_F(TransformTest, NormalMatrixWithUniformScale)
+{
+    Scene::Transform transform;
+    transform.SetScale(2.0f);
+
+    glm::mat4 normalMatrix = transform.GetNormalMatrix();
+
+    // With uniform scale of 2, the normal matrix should have 0.5 on the diagonal
+    // (inverse of scale, since normal matrix = transpose(inverse(M)))
+    EXPECT_FLOAT_EQ(normalMatrix[0][0], 0.5f);
+    EXPECT_FLOAT_EQ(normalMatrix[1][1], 0.5f);
+    EXPECT_FLOAT_EQ(normalMatrix[2][2], 0.5f);
+}
+
+TEST_F(TransformTest, NormalMatrixWithNonUniformScale)
+{
+    Scene::Transform transform;
+    transform.SetScale(glm::vec3(1.0f, 2.0f, 1.0f));
+
+    // A normal pointing in Y direction
+    glm::vec3 normal(0.0f, 1.0f, 0.0f);
+
+    glm::mat4 normalMatrix = transform.GetNormalMatrix();
+    glm::vec3 transformedNormal = glm::normalize(glm::vec3(normalMatrix * glm::vec4(normal, 0.0f)));
+
+    // Normal should still point in Y direction after transformation
+    // The normal matrix correctly handles non-uniform scaling
+    EXPECT_TRUE(VecEqual(transformedNormal, glm::vec3(0.0f, 1.0f, 0.0f)));
+}
+
+TEST_F(TransformTest, NormalMatrixWithRotation)
+{
+    Scene::Transform transform;
+    // Rotate 90 degrees around Y axis
+    transform.SetRotation(glm::angleAxis(glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f)));
+
+    // A normal pointing in Z direction
+    glm::vec3 normal(0.0f, 0.0f, 1.0f);
+
+    glm::mat4 normalMatrix = transform.GetNormalMatrix();
+    glm::vec3 transformedNormal = glm::normalize(glm::vec3(normalMatrix * glm::vec4(normal, 0.0f)));
+
+    // After 90 degree rotation around Y (right-hand rule), (0,0,1) becomes (1,0,0)
+    EXPECT_TRUE(VecEqual(transformedNormal, glm::vec3(1.0f, 0.0f, 0.0f), 0.001f));
+}
+
+TEST_F(TransformTest, NormalMatrixWithHierarchy)
+{
+    Scene::Transform parent;
+    Scene::Transform child;
+
+    parent.SetScale(glm::vec3(2.0f, 1.0f, 1.0f));
+    child.SetParent(&parent);
+
+    glm::mat4 normalMatrix = child.GetNormalMatrix();
+
+    // With parent having non-uniform scale, normal matrix should account for it
+    EXPECT_FLOAT_EQ(normalMatrix[0][0], 0.5f);
+    EXPECT_FLOAT_EQ(normalMatrix[1][1], 1.0f);
+    EXPECT_FLOAT_EQ(normalMatrix[2][2], 1.0f);
+}
+
 // =============================================================================
 // Entity Tests
 // =============================================================================
