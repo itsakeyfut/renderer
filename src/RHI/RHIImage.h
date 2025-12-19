@@ -231,6 +231,16 @@ namespace RHI
          */
         VkImageLayout GetLayout() const { return m_CurrentLayout; }
 
+        /**
+         * @brief Set the current image layout (for external barrier recording)
+         *
+         * Use this to update the tracked layout after recording a pipeline
+         * barrier externally. This does NOT record any Vulkan commands.
+         *
+         * @param layout The new layout to track
+         */
+        void SetLayout(VkImageLayout layout) { m_CurrentLayout = layout; }
+
     private:
         /**
          * @brief Private constructor - use Create() factory method

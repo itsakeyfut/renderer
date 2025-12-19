@@ -18,8 +18,8 @@
 #endif
 
 #define TINYGLTF_IMPLEMENTATION
-#define STB_IMAGE_IMPLEMENTATION
-#define STB_IMAGE_WRITE_IMPLEMENTATION
+// STB_IMAGE_IMPLEMENTATION is defined in RHI/stb_impl.cpp
+// STB_IMAGE_WRITE_IMPLEMENTATION is not needed
 #define TINYGLTF_NOEXCEPTION
 
 #include <tiny_gltf.h>
