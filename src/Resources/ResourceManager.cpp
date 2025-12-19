@@ -7,7 +7,10 @@
 #include "Resources/Texture.h"
 #include "Resources/Model.h"
 #include "Resources/Material.h"
+#include "Resources/ModelLoader.h"
 #include "Core/Log.h"
+
+#include <filesystem>
 
 namespace Resources {
 
@@ -109,8 +112,6 @@ bool ResourceManager::IsTextureValid(TextureHandle handle) const
 
 ModelHandle ResourceManager::LoadModel(const std::string& path, const ModelDesc& desc)
 {
-    (void)desc;  // Unused in stub implementation
-
     // Check cache first
     auto it = m_ModelCache.find(path);
     if (it != m_ModelCache.end()) {
@@ -125,24 +126,28 @@ ModelHandle ResourceManager::LoadModel(const std::string& path, const ModelDesc&
 
     m_Stats.ModelCacheMisses++;
 
-    // Create new model
-    // Note: This is a stub implementation. Real model loading
-    // would parse the file and create mesh data here.
-    auto model = Core::CreateRef<Model>(path);
+    // Determine file extension
+    std::string extension = std::filesystem::path(path).extension().string();
 
-    // Extract name from path
-    size_t lastSlash = path.find_last_of("/\\");
-    size_t lastDot = path.find_last_of('.');
-    if (lastSlash == std::string::npos) {
-        lastSlash = 0;
+    Core::Ref<Model> model;
+
+    // Load model based on file format
+    if (ModelLoader::IsFormatSupported(extension)) {
+        ModelLoadOptions options;
+        options.CalculateNormals = desc.CalculateNormals;
+        options.CalculateTangents = desc.CalculateTangents;
+
+        model = ModelLoader::LoadGLTF(path, options);
     }
     else {
-        lastSlash++;
+        LOG_ERROR("Unsupported model format: {}", extension);
+        return ModelHandle();
     }
-    if (lastDot == std::string::npos || lastDot < lastSlash) {
-        lastDot = path.length();
+
+    if (!model) {
+        LOG_ERROR("Failed to load model: {}", path);
+        return ModelHandle();
     }
-    model->SetName(path.substr(lastSlash, lastDot - lastSlash));
 
     ModelHandle handle = m_ModelPool.Add(model);
     m_ModelCache[path] = handle;

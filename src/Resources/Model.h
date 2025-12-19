@@ -20,6 +20,37 @@
 namespace Resources {
 
 /**
+ * @brief Material data loaded from model file (glTF).
+ *
+ * Contains texture paths and PBR parameters as loaded from
+ * the model file. Used by TextureLoader to create GPU resources.
+ */
+struct MaterialData {
+    std::string Name;
+
+    // PBR Metallic-Roughness workflow
+    std::string BaseColorTexturePath;       ///< albedo/diffuse texture
+    std::string MetallicRoughnessTexturePath; ///< metallic (B) + roughness (G)
+    std::string NormalTexturePath;          ///< normal map
+    std::string OcclusionTexturePath;       ///< ambient occlusion
+    std::string EmissiveTexturePath;        ///< emissive texture
+
+    // Base factors (used when texture is not available)
+    float BaseColorFactor[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    float MetallicFactor = 1.0f;
+    float RoughnessFactor = 1.0f;
+    float EmissiveFactor[3] = {0.0f, 0.0f, 0.0f};
+
+    // Alpha mode
+    enum class AlphaMode { Opaque, Mask, Blend };
+    AlphaMode Alpha = AlphaMode::Opaque;
+    float AlphaCutoff = 0.5f;
+
+    // Double-sided rendering
+    bool DoubleSided = false;
+};
+
+/**
  * @brief Mesh primitive within a model.
  */
 struct Mesh {
@@ -135,6 +166,37 @@ public:
      */
     void AddMesh(Mesh mesh) { m_Meshes.push_back(std::move(mesh)); }
 
+    // ========== Material data accessors ==========
+
+    /**
+     * @brief Gets the number of material data entries in this model.
+     * @return Material data count.
+     */
+    size_t GetMaterialDataCount() const { return m_MaterialData.size(); }
+
+    /**
+     * @brief Gets material data by index.
+     * @param index Material data index.
+     * @return Reference to the material data.
+     */
+    const MaterialData& GetMaterialData(size_t index) const
+    {
+        ASSERT(index < m_MaterialData.size());
+        return m_MaterialData[index];
+    }
+
+    /**
+     * @brief Gets all material data.
+     * @return Reference to the material data vector.
+     */
+    const std::vector<MaterialData>& GetMaterialDataList() const { return m_MaterialData; }
+
+    /**
+     * @brief Adds material data to the model.
+     * @param materialData Material data to add.
+     */
+    void AddMaterialData(MaterialData materialData) { m_MaterialData.push_back(std::move(materialData)); }
+
     /**
      * @brief Gets the bounding box.
      * @return Reference to the model's bounding box.
@@ -214,6 +276,7 @@ private:
     std::string m_Path;
     std::string m_Name;
     std::vector<Mesh> m_Meshes;
+    std::vector<MaterialData> m_MaterialData;
     BoundingBox m_Bounds;
 };
 

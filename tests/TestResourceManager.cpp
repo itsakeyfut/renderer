@@ -265,37 +265,34 @@ TEST_F(ResourceManagerTest, ReleaseTexture)
 // Model Management Tests
 // =============================================================================
 
-TEST_F(ResourceManagerTest, LoadModel)
+TEST_F(ResourceManagerTest, LoadModel_NonExistent)
 {
     auto& rm = Resources::ResourceManager::Instance();
 
-    auto handle = rm.LoadModel("models/cube.gltf");
-    EXPECT_TRUE(handle.IsValid());
-    EXPECT_TRUE(rm.IsModelValid(handle));
-    EXPECT_EQ(rm.GetModelCount(), 1u);
+    // Loading a non-existent model should return an invalid handle
+    auto handle = rm.LoadModel("models/nonexistent.gltf");
+    EXPECT_FALSE(handle.IsValid());
+    EXPECT_EQ(rm.GetModelCount(), 0u);
 }
 
-TEST_F(ResourceManagerTest, ModelCaching)
+TEST_F(ResourceManagerTest, LoadModel_UnsupportedFormat)
 {
     auto& rm = Resources::ResourceManager::Instance();
 
-    auto handle1 = rm.LoadModel("models/cached.gltf");
-    auto handle2 = rm.LoadModel("models/cached.gltf");
-
-    EXPECT_EQ(handle1, handle2);
-    EXPECT_EQ(rm.GetModelCount(), 1u);
+    // Loading an unsupported format should return an invalid handle
+    auto handle = rm.LoadModel("models/model.obj");
+    EXPECT_FALSE(handle.IsValid());
+    EXPECT_EQ(rm.GetModelCount(), 0u);
 }
 
-TEST_F(ResourceManagerTest, GetModelResource)
+TEST_F(ResourceManagerTest, GetModelResource_InvalidHandle)
 {
     auto& rm = Resources::ResourceManager::Instance();
 
-    auto handle = rm.LoadModel("models/test.gltf");
-    auto resource = rm.GetModelResource(handle);
+    Resources::ModelHandle invalidHandle;
+    auto resource = rm.GetModelResource(invalidHandle);
 
-    EXPECT_NE(resource, nullptr);
-    EXPECT_EQ(resource->GetPath(), "models/test.gltf");
-    EXPECT_EQ(resource->GetName(), "test");
+    EXPECT_EQ(resource, nullptr);
 }
 
 // =============================================================================
@@ -366,16 +363,13 @@ TEST_F(ResourceManagerTest, ReleaseUnused)
 
     auto tex1 = rm.LoadTexture("textures/keep.png");
     auto tex2 = rm.LoadTexture("textures/release.png");
-    auto model = rm.LoadModel("models/release.gltf");
 
-    // Release tex2 and model
+    // Release tex2
     rm.ReleaseTexture(tex2);
-    rm.ReleaseModel(model);
 
     size_t released = rm.ReleaseUnused();
-    EXPECT_EQ(released, 2u);
+    EXPECT_EQ(released, 1u);
     EXPECT_EQ(rm.GetTextureCount(), 1u);
-    EXPECT_EQ(rm.GetModelCount(), 0u);
     EXPECT_TRUE(rm.IsTextureValid(tex1));
 }
 
@@ -385,7 +379,6 @@ TEST_F(ResourceManagerTest, Clear)
 
     rm.LoadTexture("textures/clear1.png");
     rm.LoadTexture("textures/clear2.png");
-    rm.LoadModel("models/clear.gltf");
     rm.CreateMaterial("ClearMaterial");
 
     rm.Clear();
@@ -404,13 +397,11 @@ TEST_F(ResourceManagerTest, GetStats)
     auto& rm = Resources::ResourceManager::Instance();
 
     rm.LoadTexture("textures/stats.png");
-    rm.LoadModel("models/stats.gltf");
     rm.CreateMaterial("StatsMaterial");
 
     auto stats = rm.GetStats();
 
     EXPECT_EQ(stats.TextureCount, 1u);
-    EXPECT_EQ(stats.ModelCount, 1u);
     EXPECT_EQ(stats.MaterialCount, 1u);
     EXPECT_GT(stats.TotalMemoryBytes, 0u);
 }
@@ -462,16 +453,13 @@ TEST_F(ResourceManagerTest, MultipleResourceTypes)
     auto& rm = Resources::ResourceManager::Instance();
 
     auto tex = rm.LoadTexture("textures/multi.png");
-    auto model = rm.LoadModel("models/multi.gltf");
     auto mat = rm.CreateMaterial("MultiMaterial");
 
     EXPECT_TRUE(rm.IsTextureValid(tex));
-    EXPECT_TRUE(rm.IsModelValid(model));
     EXPECT_TRUE(rm.IsMaterialValid(mat));
 
     // Indices can overlap between different resource types
     // This should not cause issues
     EXPECT_EQ(rm.GetTextureCount(), 1u);
-    EXPECT_EQ(rm.GetModelCount(), 1u);
     EXPECT_EQ(rm.GetMaterialCount(), 1u);
 }
