@@ -29,6 +29,16 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
+# tinygltf - glTF 2.0 loader
+set(TINYGLTF_HEADER_ONLY ON CACHE INTERNAL "" FORCE)
+set(TINYGLTF_INSTALL OFF CACHE INTERNAL "" FORCE)
+FetchContent_Declare(
+    tinygltf
+    GIT_REPOSITORY https://github.com/syoyo/tinygltf.git
+    GIT_TAG        v2.9.7
+)
+FetchContent_MakeAvailable(tinygltf)
+
 # GLM - OpenGL Mathematics
 FetchContent_Declare(
     glm
@@ -218,9 +228,11 @@ set(RHI_SOURCES
     src/RHI/RHIDescriptorSetLayout.cpp
     src/RHI/RHIDevice.cpp
     src/RHI/RHIFence.cpp
+    src/RHI/RHIImage.cpp
     src/RHI/RHIInstance.cpp
     src/RHI/RHIPhysicalDevice.cpp
     src/RHI/RHIPipeline.cpp
+    src/RHI/RHISampler.cpp
     src/RHI/RHISemaphore.cpp
     src/RHI/RHIShader.cpp
     src/RHI/RHISwapchain.cpp
@@ -236,9 +248,11 @@ set(RHI_HEADERS
     src/RHI/RHIDescriptorSetLayout.h
     src/RHI/RHIDevice.h
     src/RHI/RHIFence.h
+    src/RHI/RHIImage.h
     src/RHI/RHIInstance.h
     src/RHI/RHIPhysicalDevice.h
     src/RHI/RHIPipeline.h
+    src/RHI/RHISampler.h
     src/RHI/RHISemaphore.h
     src/RHI/RHIShader.h
     src/RHI/RHISwapchain.h
@@ -250,13 +264,17 @@ target_link_libraries(RHI PUBLIC Core Platform ${VULKAN_TARGET} GPUOpen::VulkanM
 
 # Resources library
 set(RESOURCES_SOURCES
+    src/Resources/ModelLoader.cpp
     src/Resources/ResourceManager.cpp
+    src/Resources/TextureLoader.cpp
 )
 
 set(RESOURCES_HEADERS
     src/Resources/ResourceHandle.h
     src/Resources/ResourcePool.h
     src/Resources/ResourceManager.h
+    src/Resources/ModelLoader.h
+    src/Resources/TextureLoader.h
     src/Resources/Texture.h
     src/Resources/Model.h
     src/Resources/Material.h
@@ -266,7 +284,8 @@ set(RESOURCES_HEADERS
 
 add_library(Resources STATIC ${RESOURCES_SOURCES} ${RESOURCES_HEADERS})
 target_include_directories(Resources PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(Resources PUBLIC Core glm::glm ${VULKAN_HEADERS_TARGET})
+target_include_directories(Resources PRIVATE ${tinygltf_SOURCE_DIR})
+target_link_libraries(Resources PUBLIC Core RHI glm::glm ${VULKAN_HEADERS_TARGET})
 
 # Scene library (header-only for now)
 set(SCENE_HEADERS
@@ -286,11 +305,13 @@ target_link_libraries(Scene INTERFACE Core Platform Resources glm::glm)
 
 # Renderer library
 set(RENDERER_SOURCES
+    src/Renderer/DepthBuffer.cpp
     src/Renderer/FrameManager.cpp
     src/Renderer/Debug/ImGuiRenderer.cpp
 )
 
 set(RENDERER_HEADERS
+    src/Renderer/DepthBuffer.h
     src/Renderer/FrameManager.h
     src/Renderer/Debug/ImGuiRenderer.h
 )
@@ -411,6 +432,12 @@ if(BUILD_TESTS)
     add_executable(TestVertex tests/TestVertex.cpp)
     target_link_libraries(TestVertex PRIVATE Resources Core GTest::gtest_main)
     gtest_discover_tests(TestVertex)
+
+    # ModelLoader test
+    add_executable(TestModelLoader tests/TestModelLoader.cpp)
+    target_include_directories(TestModelLoader PRIVATE ${tinygltf_SOURCE_DIR})
+    target_link_libraries(TestModelLoader PRIVATE Resources Core GTest::gtest_main)
+    gtest_discover_tests(TestModelLoader)
 
     # RHI Descriptor test
     add_executable(TestRHIDescriptor tests/TestRHIDescriptor.cpp)

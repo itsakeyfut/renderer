@@ -41,11 +41,10 @@ namespace RHI
         entry.Deletor = std::move(deletor);
         entry.QueuedFrame = m_CurrentFrame;
 
-        uint32_t queuedFrame = entry.QueuedFrame;
         m_DeletionQueue.push_back(std::move(entry));
 
         LOG_TRACE("Queued deletion for frame {} (current: {})",
-                  queuedFrame + m_FrameDelay, m_CurrentFrame);
+                  m_CurrentFrame + m_FrameDelay, m_CurrentFrame);
     }
 
     void RHIDeletionQueue::Push(const Deletor& deletor)
@@ -62,11 +61,10 @@ namespace RHI
         entry.Deletor = deletor;
         entry.QueuedFrame = m_CurrentFrame;
 
-        uint32_t queuedFrame = entry.QueuedFrame;
         m_DeletionQueue.push_back(std::move(entry));
 
         LOG_TRACE("Queued deletion for frame {} (current: {})",
-                  queuedFrame + m_FrameDelay, m_CurrentFrame);
+                  m_CurrentFrame + m_FrameDelay, m_CurrentFrame);
     }
 
     void RHIDeletionQueue::Flush(uint32_t currentFrame)
@@ -130,8 +128,9 @@ namespace RHI
             return;
         }
 
-        size_t count = m_DeletionQueue.size();
-        LOG_DEBUG("DeletionQueue: Flushing all {} pending deletions", count);
+        LOG_DEBUG("DeletionQueue: Flushing all {} pending deletions", m_DeletionQueue.size());
+
+        [[maybe_unused]] size_t deletedCount = 0;
 
         // Execute all deletors regardless of frame
         while (!m_DeletionQueue.empty())
@@ -141,12 +140,13 @@ namespace RHI
             if (entry.Deletor)
             {
                 entry.Deletor();
+                deletedCount++;
             }
 
             m_DeletionQueue.pop_front();
         }
 
-        LOG_DEBUG("DeletionQueue: FlushAll completed, {} deletions executed", count);
+        LOG_DEBUG("DeletionQueue: FlushAll completed, {} deletions executed", deletedCount);
     }
 
     size_t RHIDeletionQueue::GetPendingCount() const
