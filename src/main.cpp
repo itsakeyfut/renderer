@@ -642,7 +642,7 @@ int main()
         cameraUBOs[frameIndex]->SetData(&cameraData, sizeof(cameraData));
 
         Resources::ObjectUBO objectData;
-        // First rotate around X axis by -90 degrees to stand the model upright,
+        // First rotate around X axis by 90 degrees to stand the model upright,
         // then apply Y-axis auto-rotation
         glm::mat4 standUpright = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
         glm::mat4 autoRotate = glm::rotate(glm::mat4(1.0f), glm::radians(rotationAngle), glm::vec3(0.0f, 1.0f, 0.0f));
