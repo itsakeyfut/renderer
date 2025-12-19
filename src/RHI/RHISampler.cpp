@@ -43,6 +43,21 @@ namespace RHI
         return Create(device, desc);
     }
 
+    Core::Ref<RHISampler> RHISampler::CreateLinearClamp(const Core::Ref<RHIDevice>& device)
+    {
+        SamplerDesc desc;
+        desc.MagFilter = FilterMode::Linear;
+        desc.MinFilter = FilterMode::Linear;
+        desc.MipmapMode = FilterMode::Linear;
+        desc.AddressModeU = AddressMode::ClampToEdge;
+        desc.AddressModeV = AddressMode::ClampToEdge;
+        desc.AddressModeW = AddressMode::ClampToEdge;
+        desc.AnisotropyEnable = true;
+        desc.MaxAnisotropy = 16.0f;
+        desc.DebugName = "LinearClampSampler";
+        return Create(device, desc);
+    }
+
     Core::Ref<RHISampler> RHISampler::CreateNearest(const Core::Ref<RHIDevice>& device)
     {
         SamplerDesc desc;
