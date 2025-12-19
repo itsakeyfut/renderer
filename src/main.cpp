@@ -132,10 +132,6 @@ bool LoadNewModel(
         return false;
     }
 
-    // Destroy old buffers (after WaitIdle, safe to destroy)
-    vertexBuffer.reset();
-    indexBuffer.reset();
-
     // Merge all meshes into single buffers
     std::vector<Resources::Vertex> mergedVertices;
     std::vector<uint32_t> mergedIndices;
@@ -153,35 +149,39 @@ bool LoadNewModel(
         }
     }
 
-    // Create vertex buffer
+    // Create new vertex buffer (keep old buffers until success)
     RHI::BufferDesc vertexDesc;
     vertexDesc.Size = sizeof(Resources::Vertex) * mergedVertices.size();
     vertexDesc.Usage = RHI::BufferUsage::Vertex;
     vertexDesc.Memory = RHI::MemoryUsage::CpuToGpu;
     vertexDesc.DebugName = "Model Vertex Buffer";
 
-    vertexBuffer = RHI::RHIBuffer::Create(device, vertexDesc);
-    if (!vertexBuffer)
+    auto newVertexBuffer = RHI::RHIBuffer::Create(device, vertexDesc);
+    if (!newVertexBuffer)
     {
         LOG_ERROR("Failed to create vertex buffer for new model");
         return false;
     }
-    vertexBuffer->SetData(mergedVertices.data(), vertexDesc.Size);
+    newVertexBuffer->SetData(mergedVertices.data(), vertexDesc.Size);
 
-    // Create index buffer
+    // Create new index buffer
     RHI::BufferDesc indexDesc;
     indexDesc.Size = sizeof(uint32_t) * mergedIndices.size();
     indexDesc.Usage = RHI::BufferUsage::Index;
     indexDesc.Memory = RHI::MemoryUsage::CpuToGpu;
     indexDesc.DebugName = "Model Index Buffer";
 
-    indexBuffer = RHI::RHIBuffer::Create(device, indexDesc);
-    if (!indexBuffer)
+    auto newIndexBuffer = RHI::RHIBuffer::Create(device, indexDesc);
+    if (!newIndexBuffer)
     {
         LOG_ERROR("Failed to create index buffer for new model");
         return false;
     }
-    indexBuffer->SetData(mergedIndices.data(), indexDesc.Size);
+    newIndexBuffer->SetData(mergedIndices.data(), indexDesc.Size);
+
+    // Success - now safe to replace old buffers with new ones
+    vertexBuffer = std::move(newVertexBuffer);
+    indexBuffer = std::move(newIndexBuffer);
 
     // Update total index count
     totalIndexCount = static_cast<uint32_t>(mergedIndices.size());
