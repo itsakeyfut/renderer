@@ -75,7 +75,7 @@ Core::Ref<RHITexture> RHITexture::LoadFromFile(
 
     // Load image with stb_image
     int width, height, channels;
-    stbi_set_flip_vertically_on_load(0);  // Vulkan uses top-left origin
+    stbi_set_flip_vertically_on_load_thread(0);  // Vulkan uses top-left origin (thread-safe)
 
     unsigned char* pixels = stbi_load(
         filepath.c_str(),
