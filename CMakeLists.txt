@@ -193,6 +193,8 @@ set(CORE_SOURCES
 set(CORE_HEADERS
     src/Core/Assert.h
     src/Core/Config.h
+    src/Core/Event.h
+    src/Core/EventDispatcher.h
     src/Core/Log.h
     src/Core/Timer.h
     src/Core/Types.h
@@ -354,6 +356,11 @@ if(BUILD_TESTS)
     add_executable(TestConfig tests/TestConfig.cpp)
     target_link_libraries(TestConfig PRIVATE Core GTest::gtest_main)
     gtest_discover_tests(TestConfig)
+
+    # Event test
+    add_executable(TestEvent tests/TestEvent.cpp)
+    target_link_libraries(TestEvent PRIVATE Core GTest::gtest_main)
+    gtest_discover_tests(TestEvent)
 
     # Window test
     add_executable(TestWindow tests/TestWindow.cpp)
