@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "Core/Assert.h"
 #include "Core/Types.h"
 #include "RHI/RHIBuffer.h"
 #include "RHI/RHIDescriptorSetLayout.h"
@@ -181,19 +182,23 @@ public:
      * @return Shared pointer to the descriptor set.
      */
     const Core::Ref<RHI::RHIDescriptorSet>& GetDescriptorSet(uint32_t frameIndex) const {
+        ASSERT(frameIndex < MAX_FRAMES_IN_FLIGHT);
         return m_DescriptorSets[frameIndex];
     }
 
     /**
-     * @brief Marks light data as dirty, requiring GPU update.
+     * @brief Marks light data as dirty, requiring GPU update for all frames.
+     *
+     * With per-frame buffering, all in-flight frames need to be updated
+     * when light data changes.
      */
-    void MarkDirty() { m_Dirty = true; }
+    void MarkDirty() { m_DirtyFrameCount = MAX_FRAMES_IN_FLIGHT; }
 
     /**
-     * @brief Checks if light data needs GPU update.
-     * @return true if data has changed since last update.
+     * @brief Checks if any frames still need GPU update.
+     * @return true if at least one frame needs updating.
      */
-    bool IsDirty() const { return m_Dirty; }
+    bool IsDirty() const { return m_DirtyFrameCount > 0; }
 
 private:
     LightManager() = default;
@@ -227,8 +232,8 @@ private:
     Core::Ref<RHI::RHIDescriptorPool> m_DescriptorPool;
     std::array<Core::Ref<RHI::RHIDescriptorSet>, MAX_FRAMES_IN_FLIGHT> m_DescriptorSets;
 
-    // State tracking
-    bool m_Dirty = true;
+    // State tracking - counts frames needing update for per-frame buffering
+    uint32_t m_DirtyFrameCount = MAX_FRAMES_IN_FLIGHT;
 
     // Device reference for buffer updates
     Core::Ref<RHI::RHIDevice> m_Device;

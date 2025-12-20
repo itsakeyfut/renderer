@@ -134,13 +134,13 @@ bool LightManager::Initialize(
 void LightManager::SetDirectionalLight(const Scene::DirectionalLight& light)
 {
     m_DirectionalLight = light;
-    m_Dirty = true;
+    MarkDirty();
 }
 
 void LightManager::ClearPointLights()
 {
     m_PointLights.clear();
-    m_Dirty = true;
+    MarkDirty();
 }
 
 int32_t LightManager::AddPointLight(const Scene::PointLight& light)
@@ -151,7 +151,7 @@ int32_t LightManager::AddPointLight(const Scene::PointLight& light)
     }
 
     m_PointLights.push_back(light);
-    m_Dirty = true;
+    MarkDirty();
     return static_cast<int32_t>(m_PointLights.size() - 1);
 }
 
@@ -162,7 +162,7 @@ bool LightManager::UpdatePointLight(size_t index, const Scene::PointLight& light
     }
 
     m_PointLights[index] = light;
-    m_Dirty = true;
+    MarkDirty();
     return true;
 }
 
@@ -177,7 +177,7 @@ const Scene::PointLight* LightManager::GetPointLight(size_t index) const
 void LightManager::ClearSpotLights()
 {
     m_SpotLights.clear();
-    m_Dirty = true;
+    MarkDirty();
 }
 
 int32_t LightManager::AddSpotLight(const Scene::SpotLight& light)
@@ -188,7 +188,7 @@ int32_t LightManager::AddSpotLight(const Scene::SpotLight& light)
     }
 
     m_SpotLights.push_back(light);
-    m_Dirty = true;
+    MarkDirty();
     return static_cast<int32_t>(m_SpotLights.size() - 1);
 }
 
@@ -199,7 +199,7 @@ bool LightManager::UpdateSpotLight(size_t index, const Scene::SpotLight& light)
     }
 
     m_SpotLights[index] = light;
-    m_Dirty = true;
+    MarkDirty();
     return true;
 }
 
@@ -237,8 +237,10 @@ void LightManager::UpdateGPUBuffers(uint32_t frameIndex)
             sizeof(Scene::SpotLight) * m_SpotLights.size());
     }
 
-    // Clear dirty flag after update
-    m_Dirty = false;
+    // Decrement dirty frame count after updating this frame's buffer
+    if (m_DirtyFrameCount > 0) {
+        --m_DirtyFrameCount;
+    }
 }
 
 } // namespace Renderer
