@@ -27,6 +27,7 @@
 #include "RHI/RHISampler.h"
 #include "Renderer/DepthBuffer.h"
 #include "Renderer/FrameManager.h"
+#include "Renderer/LightManager.h"
 #include "Renderer/Debug/ImGuiRenderer.h"
 #include "Resources/ModelLoader.h"
 #include "Resources/Model.h"
@@ -34,6 +35,7 @@
 #include "Resources/Vertex.h"
 #include "Resources/UniformBufferObjects.h"
 #include "Scene/Camera.h"
+#include "Scene/Light.h"
 
 #include <imgui.h>
 #include <glm/glm.hpp>
@@ -567,6 +569,42 @@ int main()
     }
 
     // =========================================================================
+    // Light Manager
+    // =========================================================================
+    Renderer::LightManagerConfig lightConfig;
+    lightConfig.MaxPointLights = 64;
+    lightConfig.MaxSpotLights = 32;
+
+    auto lightManager = Renderer::LightManager::Create(device, lightConfig);
+    if (!lightManager)
+    {
+        LOG_FATAL("Failed to create light manager!");
+        return EXIT_FAILURE;
+    }
+
+    // Set up default scene lighting
+    // Main directional light (sun-like from upper right)
+    lightManager->SetDirectionalLight(Scene::DirectionalLight::Create(
+        glm::vec3(1.0f, 1.0f, 1.0f),    // Direction (normalized automatically)
+        glm::vec3(1.0f, 0.98f, 0.95f),  // Warm white color
+        1.0f));                          // Intensity
+
+    // Add some demo point lights
+    lightManager->AddPointLight(Scene::PointLight::Create(
+        glm::vec3(2.0f, 2.0f, 2.0f),    // Position
+        glm::vec3(1.0f, 0.8f, 0.6f),    // Warm color
+        1.5f,                            // Intensity
+        10.0f));                         // Radius
+
+    lightManager->AddPointLight(Scene::PointLight::Create(
+        glm::vec3(-2.0f, 1.5f, -1.0f),  // Position
+        glm::vec3(0.6f, 0.8f, 1.0f),    // Cool color
+        1.0f,                            // Intensity
+        8.0f));                          // Radius
+
+    LOG_INFO("Light manager created with {} point lights", lightManager->GetPointLightCount());
+
+    // =========================================================================
     // Model Loading
     // =========================================================================
     std::string modelPath = "assets/models/a_contortionist_dancer/scene.gltf";
@@ -940,9 +978,10 @@ int main()
     pipelineDesc.ColorAttachmentFormats.push_back(swapchain->GetImageFormat());
     pipelineDesc.DepthAttachmentFormat = depthBuffer->GetFormat();
 
-    // Descriptor set layouts: Set 0 = scene data, Set 1 = material data
+    // Descriptor set layouts: Set 0 = scene data, Set 1 = material data, Set 2 = light data
     pipelineDesc.DescriptorSetLayouts.push_back(descriptorLayout->GetHandle());
     pipelineDesc.DescriptorSetLayouts.push_back(materialDescriptorLayout->GetHandle());
+    pipelineDesc.DescriptorSetLayouts.push_back(lightManager->GetDescriptorSetLayout()->GetHandle());
 
     auto pipeline = RHI::RHIPipeline::CreateGraphics(device, pipelineDesc);
     if (!pipeline)
@@ -997,6 +1036,7 @@ int main()
     // Debug UI state
     bool showStatsWindow = true;
     bool showDemoWindow = false;
+    bool showLightWindow = true;
 
     // Camera control
     float cameraSpeed = 2.0f;
@@ -1037,6 +1077,10 @@ int main()
         if (Platform::Input::IsKeyPressed(Platform::KeyCode::F2))
         {
             showDemoWindow = !showDemoWindow;
+        }
+        if (Platform::Input::IsKeyPressed(Platform::KeyCode::F3))
+        {
+            showLightWindow = !showLightWindow;
         }
 
         // Mouse capture toggle
@@ -1147,6 +1191,9 @@ int main()
         objectData.NormalMatrix = glm::transpose(glm::inverse(objectData.Model));
         objectUBOs[frameIndex]->SetData(&objectData, sizeof(objectData));
 
+        // Update light GPU buffers
+        lightManager->UpdateGPUBuffers(frameIndex);
+
         // =====================================================================
         // ImGui Frame
         // =====================================================================
@@ -1187,6 +1234,272 @@ int main()
                     }
                 }
             }
+            ImGui::End();
+        }
+
+        // Light Settings Window
+        if (showLightWindow)
+        {
+            ImGui::Begin("Light Settings", &showLightWindow);
+
+            // Directional Light
+            if (ImGui::CollapsingHeader("Directional Light", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                Scene::DirectionalLight dirLight = lightManager->GetDirectionalLight();
+                bool dirChanged = false;
+
+                // Direction as angles (easier to understand)
+                glm::vec3 dir = dirLight.Direction;
+                float pitch = glm::degrees(asin(-dir.y));
+                float yaw = glm::degrees(atan2(dir.x, dir.z));
+
+                if (ImGui::SliderFloat("Pitch##Dir", &pitch, -89.0f, 89.0f, "%.1f deg"))
+                {
+                    dirChanged = true;
+                }
+                if (ImGui::SliderFloat("Yaw##Dir", &yaw, -180.0f, 180.0f, "%.1f deg"))
+                {
+                    dirChanged = true;
+                }
+
+                if (dirChanged)
+                {
+                    float pitchRad = glm::radians(pitch);
+                    float yawRad = glm::radians(yaw);
+                    dirLight.Direction = glm::normalize(glm::vec3(
+                        sin(yawRad) * cos(pitchRad),
+                        -sin(pitchRad),
+                        cos(yawRad) * cos(pitchRad)));
+                }
+
+                if (ImGui::ColorEdit3("Color##Dir", &dirLight.Color.x))
+                {
+                    dirChanged = true;
+                }
+                if (ImGui::SliderFloat("Intensity##Dir", &dirLight.Intensity, 0.0f, 5.0f))
+                {
+                    dirChanged = true;
+                }
+
+                if (dirChanged)
+                {
+                    lightManager->SetDirectionalLight(dirLight);
+                }
+            }
+
+            // Point Lights
+            if (ImGui::CollapsingHeader("Point Lights", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                ImGui::Text("Count: %zu / %d", lightManager->GetPointLightCount(), 64);
+
+                // Add button
+                if (lightManager->GetPointLightCount() < 64)
+                {
+                    if (ImGui::Button("Add Point Light"))
+                    {
+                        // Add a new light near the camera
+                        glm::vec3 pos = camera.GetPosition() + camera.GetForward() * 3.0f;
+                        lightManager->AddPointLight(Scene::PointLight::Create(
+                            pos, glm::vec3(1.0f), 1.0f, 10.0f));
+                    }
+                }
+
+                ImGui::Separator();
+
+                // List of point lights
+                int toRemove = -1;
+                for (size_t i = 0; i < lightManager->GetPointLightCount(); ++i)
+                {
+                    const Scene::PointLight* pLight = lightManager->GetPointLight(i);
+                    if (!pLight) continue;
+
+                    Scene::PointLight light = *pLight;
+                    bool changed = false;
+
+                    ImGui::PushID(static_cast<int>(i));
+
+                    if (ImGui::TreeNode("", "Light %zu", i))
+                    {
+                        if (ImGui::DragFloat3("Position", &light.Position.x, 0.1f))
+                        {
+                            changed = true;
+                        }
+                        if (ImGui::ColorEdit3("Color", &light.Color.x))
+                        {
+                            changed = true;
+                        }
+                        if (ImGui::SliderFloat("Intensity", &light.Intensity, 0.0f, 10.0f))
+                        {
+                            changed = true;
+                        }
+                        if (ImGui::SliderFloat("Radius", &light.Radius, 0.1f, 100.0f))
+                        {
+                            changed = true;
+                        }
+
+                        if (ImGui::Button("Remove"))
+                        {
+                            toRemove = static_cast<int>(i);
+                        }
+
+                        if (changed)
+                        {
+                            lightManager->UpdatePointLight(i, light);
+                        }
+
+                        ImGui::TreePop();
+                    }
+
+                    ImGui::PopID();
+                }
+
+                // Remove light if requested (after iteration)
+                if (toRemove >= 0)
+                {
+                    // For now, clear all and re-add (simple approach)
+                    std::vector<Scene::PointLight> lights;
+                    for (size_t i = 0; i < lightManager->GetPointLightCount(); ++i)
+                    {
+                        if (static_cast<int>(i) != toRemove)
+                        {
+                            const Scene::PointLight* pl = lightManager->GetPointLight(i);
+                            if (pl) lights.push_back(*pl);
+                        }
+                    }
+                    lightManager->ClearPointLights();
+                    for (const auto& l : lights)
+                    {
+                        lightManager->AddPointLight(l);
+                    }
+                }
+            }
+
+            // Spot Lights
+            if (ImGui::CollapsingHeader("Spot Lights"))
+            {
+                ImGui::Text("Count: %zu / %d", lightManager->GetSpotLightCount(), 32);
+
+                // Add button
+                if (lightManager->GetSpotLightCount() < 32)
+                {
+                    if (ImGui::Button("Add Spot Light"))
+                    {
+                        glm::vec3 pos = camera.GetPosition() + camera.GetForward() * 3.0f;
+                        lightManager->AddSpotLight(Scene::SpotLight::Create(
+                            pos, glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(1.0f), 1.0f, 25.0f, 35.0f));
+                    }
+                }
+
+                ImGui::Separator();
+
+                // List of spot lights
+                int toRemoveSpot = -1;
+                for (size_t i = 0; i < lightManager->GetSpotLightCount(); ++i)
+                {
+                    const Scene::SpotLight* sLight = lightManager->GetSpotLight(i);
+                    if (!sLight) continue;
+
+                    Scene::SpotLight light = *sLight;
+                    bool changed = false;
+
+                    ImGui::PushID(static_cast<int>(i + 1000)); // Offset to avoid ID collision
+
+                    if (ImGui::TreeNode("", "Spot %zu", i))
+                    {
+                        if (ImGui::DragFloat3("Position", &light.Position.x, 0.1f))
+                        {
+                            changed = true;
+                        }
+
+                        // Direction as angles
+                        glm::vec3 dir = glm::normalize(light.Direction);
+                        float pitch = glm::degrees(asin(-dir.y));
+                        float yaw = glm::degrees(atan2(dir.x, dir.z));
+
+                        bool dirChanged = false;
+                        if (ImGui::SliderFloat("Pitch", &pitch, -89.0f, 89.0f, "%.1f deg"))
+                        {
+                            dirChanged = true;
+                        }
+                        if (ImGui::SliderFloat("Yaw", &yaw, -180.0f, 180.0f, "%.1f deg"))
+                        {
+                            dirChanged = true;
+                        }
+
+                        if (dirChanged)
+                        {
+                            float pitchRad = glm::radians(pitch);
+                            float yawRad = glm::radians(yaw);
+                            light.Direction = glm::normalize(glm::vec3(
+                                sin(yawRad) * cos(pitchRad),
+                                -sin(pitchRad),
+                                cos(yawRad) * cos(pitchRad)));
+                            changed = true;
+                        }
+
+                        if (ImGui::ColorEdit3("Color", &light.Color.x))
+                        {
+                            changed = true;
+                        }
+                        if (ImGui::SliderFloat("Intensity", &light.Intensity, 0.0f, 10.0f))
+                        {
+                            changed = true;
+                        }
+
+                        // Convert cos angles back to degrees for editing
+                        float innerDeg = glm::degrees(acos(light.InnerConeAngle));
+                        float outerDeg = glm::degrees(acos(light.OuterConeAngle));
+
+                        if (ImGui::SliderFloat("Inner Angle", &innerDeg, 1.0f, 89.0f, "%.1f deg"))
+                        {
+                            light.InnerConeAngle = cos(glm::radians(innerDeg));
+                            changed = true;
+                        }
+                        if (ImGui::SliderFloat("Outer Angle", &outerDeg, 1.0f, 90.0f, "%.1f deg"))
+                        {
+                            light.OuterConeAngle = cos(glm::radians(outerDeg));
+                            changed = true;
+                        }
+
+                        if (ImGui::Button("Remove"))
+                        {
+                            toRemoveSpot = static_cast<int>(i);
+                        }
+
+                        if (changed)
+                        {
+                            lightManager->UpdateSpotLight(i, light);
+                        }
+
+                        ImGui::TreePop();
+                    }
+
+                    ImGui::PopID();
+                }
+
+                // Remove spot light if requested
+                if (toRemoveSpot >= 0)
+                {
+                    std::vector<Scene::SpotLight> lights;
+                    for (size_t i = 0; i < lightManager->GetSpotLightCount(); ++i)
+                    {
+                        if (static_cast<int>(i) != toRemoveSpot)
+                        {
+                            const Scene::SpotLight* sl = lightManager->GetSpotLight(i);
+                            if (sl) lights.push_back(*sl);
+                        }
+                    }
+                    lightManager->ClearSpotLights();
+                    for (const auto& l : lights)
+                    {
+                        lightManager->AddSpotLight(l);
+                    }
+                }
+            }
+
+            ImGui::Separator();
+            ImGui::Text("Press F3 to toggle this window");
+
             ImGui::End();
         }
 
@@ -1260,6 +1573,14 @@ int main()
             pipeline->GetLayout(),
             0,
             {descriptorSets[frameIndex]->GetHandle()});
+
+        // Bind light descriptor set (Set 2)
+        cmdBuffer->BindDescriptorSets(
+            VK_PIPELINE_BIND_POINT_GRAPHICS,
+            pipeline->GetLayout(),
+            2,
+            {lightManager->GetDescriptorSet(frameIndex)->GetHandle()});
+
         cmdBuffer->BindVertexBuffer(vertexBuffer->GetHandle());
         cmdBuffer->BindIndexBuffer(indexBuffer->GetHandle(), VK_INDEX_TYPE_UINT32);
 
@@ -1393,6 +1714,7 @@ int main()
     vertexBuffer.reset();
     loadedModel.reset();
 
+    lightManager.reset();
     frameManager.reset();
     depthBuffer.reset();
     swapchain.reset();

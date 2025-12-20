@@ -323,12 +323,14 @@ target_link_libraries(Scene INTERFACE Core Platform Resources glm::glm)
 set(RENDERER_SOURCES
     src/Renderer/DepthBuffer.cpp
     src/Renderer/FrameManager.cpp
+    src/Renderer/LightManager.cpp
     src/Renderer/Debug/ImGuiRenderer.cpp
 )
 
 set(RENDERER_HEADERS
     src/Renderer/DepthBuffer.h
     src/Renderer/FrameManager.h
+    src/Renderer/LightManager.h
     src/Renderer/Debug/ImGuiRenderer.h
 )
 

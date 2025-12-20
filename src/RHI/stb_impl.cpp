@@ -16,6 +16,7 @@
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wunused-function"
 #pragma GCC diagnostic ignored "-Wsign-compare"
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
 #endif
 
 #define STB_IMAGE_IMPLEMENTATION
