@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A Vulkan-based renderer written in C++20. Currently in early development with Core utilities implemented.
+A Vulkan-based renderer written in C++20. Uses Dynamic Rendering (VK_KHR_dynamic_rendering) instead of traditional render passes.
 
 ## Build Commands
 
@@ -18,12 +18,15 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 # Build
 cmake --build build
 
+# Run application
+./build/VulkanRenderer.exe
+
 # Run all tests
 ctest --test-dir build --output-on-failure
 
 # Run specific test by name
 ctest --test-dir build -R LogTest
-ctest --test-dir build -R AssertTest
+ctest --test-dir build -R RHIDeviceTest
 ```
 
 ## Architecture
@@ -33,15 +36,13 @@ ctest --test-dir build -R AssertTest
 Application → Scene → Renderer → Resources → RHI → Platform → Core
 ```
 
-**Current Implementation:**
-- `src/Core/` - Foundation (Types, Assert, Log) - uses spdlog for logging
-
-**Planned Layers:**
-- `src/Platform/` - Window, Input, FileSystem
-- `src/RHI/` - Vulkan abstraction (Device, CommandBuffer, Pipeline, etc.)
-- `src/Resources/` - Asset loading (models, textures)
-- `src/Renderer/` - Render passes, post-processing
-- `src/Scene/` - Entity/component management
+**Current Implementation Status:**
+- `Core/` - Foundation (Types, Assert, Log, Timer, Config, Event, ThreadPool)
+- `Platform/` - Window (GLFW), Input handling, FileDialog
+- `RHI/` - Vulkan abstraction (Instance, Device, Swapchain, CommandBuffer, Pipeline, Buffer, Texture, Sampler, Descriptors, MipmapGenerator)
+- `Resources/` - ModelLoader (glTF via tinygltf), TextureLoader, ResourceManager, AsyncResourceLoader
+- `Renderer/` - FrameManager, DepthBuffer, ImGuiRenderer
+- `Scene/` - Camera, FPS/Orbit controllers, Entity, Transform, Light, Scene
 
 ## Coding Conventions
 
@@ -71,22 +72,35 @@ Application → Scene → Renderer → Resources → RHI → Platform → Core
 - `Core::Scope<T>` → `std::unique_ptr<T>`
 - `Core::CreateRef<T>(args...)` / `Core::CreateScope<T>(args...)`
 
+## Key Design Patterns
+
+**Handle-Based Resources**: Use `ResourceHandle<T>` with generation counter for safe GPU resource references.
+
+**Deferred Deletion**: `RHIDeletionQueue` queues resource deletion until GPU is done (frame overlap = 2).
+
+**Frame-in-Flight**: `FrameManager` manages per-frame command buffers, semaphores, and fences (MAX_FRAMES_IN_FLIGHT = 2).
+
 ## Language Requirements
 
 - All code comments in English
 - All documentation in English
-- All commit messages in English (but PR content in Japanese per `/finish` command)
+- Commit messages in English
+- PR titles and bodies in Japanese (per `/finish` command)
 
-## Dependencies
+## Dependencies (via CMake FetchContent)
 
-Managed via CMake FetchContent:
 - spdlog v1.16.0 - Logging
 - GoogleTest v1.17.0 - Testing
+- GLFW 3.4 - Windowing
+- GLM 1.0.2 - Math
+- VMA v3.3.0 - Vulkan Memory Allocator
+- tinygltf v2.9.7 - glTF loading
+- nlohmann_json v3.12.0 - JSON parsing
+- Dear ImGui v1.92.5 - Debug UI
 
 ## Reference Documents
 
 - `specs/architecture.md` - Full architecture design
-- `specs/overview.md` - Project overview and tech stack
-- `specs/vulkan-concepts.md` - Core Vulkan concepts
 - `specs/implementation-phases.md` - Implementation phases and detailed tasks
-- `specs/checklist.md` - Progress tracking
+- `specs/checklist.md` - Progress tracking (Phase 1-2 complete)
+- `specs/vulkan-concepts.md` - Core Vulkan concepts
