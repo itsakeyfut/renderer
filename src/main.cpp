@@ -334,11 +334,13 @@ bool LoadNewModel(
     // Create a fallback material first (used when individual material creation fails)
     auto newFallbackMaterial = Resources::MaterialInstance::Create(
         device, newMaterialDescriptorPool, materialDescriptorLayout, materialSampler, defaultTexture);
-    if (newFallbackMaterial)
+    if (!newFallbackMaterial)
     {
-        newFallbackMaterial->SetBaseColor(glm::vec4(0.8f, 0.8f, 0.8f, 1.0f));
-        newFallbackMaterial->SetRoughness(0.5f);
+        LOG_ERROR("Failed to create fallback material for new model");
+        return false;
     }
+    newFallbackMaterial->SetBaseColor(glm::vec4(0.8f, 0.8f, 0.8f, 1.0f));
+    newFallbackMaterial->SetRoughness(0.5f);
 
     for (size_t i = 0; i < newModel->GetMaterialDataCount(); ++i)
     {
@@ -368,7 +370,11 @@ bool LoadNewModel(
             matData.EmissiveFactor[0],
             matData.EmissiveFactor[1],
             matData.EmissiveFactor[2]));
-        matInstance->SetAlphaCutoff(matData.AlphaCutoff);
+
+        if (matData.Alpha == Resources::MaterialData::AlphaMode::Mask)
+        {
+            matInstance->SetAlphaCutoff(matData.AlphaCutoff);
+        }
 
         // Bind textures
         if (textures[0]) matInstance->SetTexture(Resources::TextureSlot::BaseColor, textures[0]);
@@ -709,11 +715,13 @@ int main()
     // Create a fallback material first (used when individual material creation fails)
     auto fallbackMaterial = Resources::MaterialInstance::Create(
         device, materialDescriptorPool, materialDescriptorLayout, materialSampler, defaultTexture);
-    if (fallbackMaterial)
+    if (!fallbackMaterial)
     {
-        fallbackMaterial->SetBaseColor(glm::vec4(0.7f, 0.7f, 0.7f, 1.0f));
-        fallbackMaterial->SetRoughness(0.5f);
+        LOG_FATAL("Failed to create fallback material!");
+        return EXIT_FAILURE;
     }
+    fallbackMaterial->SetBaseColor(glm::vec4(0.7f, 0.7f, 0.7f, 1.0f));
+    fallbackMaterial->SetRoughness(0.5f);
 
     for (size_t i = 0; i < loadedModel->GetMaterialDataCount(); ++i)
     {
