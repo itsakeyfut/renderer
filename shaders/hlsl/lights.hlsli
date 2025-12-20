@@ -104,6 +104,10 @@ float3 CalculateBlinnPhong(
     float NdotL = max(dot(normal, lightDir), 0.0);
     float3 diffuse = NdotL * lightColor * albedo;
 
+    // No specular if surface faces away from light
+    if (NdotL <= 0.0)
+        return diffuse;
+
     // Specular (Blinn-Phong)
     float3 halfDir = normalize(lightDir + viewDir);
     float NdotH = max(dot(normal, halfDir), 0.0);
@@ -150,8 +154,8 @@ float RoughnessToShininess(float roughness)
     // Map roughness 0..1 to shininess 2048..2
     // roughness 0 -> shininess 2048 (mirror-like)
     // roughness 1 -> shininess 2 (very matte)
-    float r = clamp(roughness, 0.01, 1.0);
-    return 2.0 / (r * r) - 2.0;
+    float r = clamp(roughness, 0.0, 1.0);
+    return lerp(2048.0, 2.0, r);
 }
 
 // ============================================================================
