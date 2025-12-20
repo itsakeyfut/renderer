@@ -148,16 +148,18 @@ namespace RHI
             }
         }
 
-        // Enable Vulkan 1.3 dynamic rendering feature
-        // Required for vkCmdBeginRendering/vkCmdEndRendering
-        VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures{};
-        dynamicRenderingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
-        dynamicRenderingFeatures.dynamicRendering = VK_TRUE;
+        // Enable Vulkan 1.3 features
+        // - dynamicRendering: Required for vkCmdBeginRendering/vkCmdEndRendering
+        // - shaderDemoteToHelperInvocation: Required for HLSL discard (compiles to OpDemoteToHelperInvocation)
+        VkPhysicalDeviceVulkan13Features vulkan13Features{};
+        vulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+        vulkan13Features.dynamicRendering = VK_TRUE;
+        vulkan13Features.shaderDemoteToHelperInvocation = VK_TRUE;
 
         // Create device create info
         VkDeviceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-        createInfo.pNext = &dynamicRenderingFeatures;
+        createInfo.pNext = &vulkan13Features;
         createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
         createInfo.pEnabledFeatures = &deviceFeatures;

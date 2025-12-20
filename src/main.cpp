@@ -23,11 +23,14 @@
 #include "RHI/RHIDescriptorSetLayout.h"
 #include "RHI/RHIDescriptorPool.h"
 #include "RHI/RHIDescriptorSet.h"
+#include "RHI/RHITexture.h"
+#include "RHI/RHISampler.h"
 #include "Renderer/DepthBuffer.h"
 #include "Renderer/FrameManager.h"
 #include "Renderer/Debug/ImGuiRenderer.h"
 #include "Resources/ModelLoader.h"
 #include "Resources/Model.h"
+#include "Resources/MaterialInstance.h"
 #include "Resources/Vertex.h"
 #include "Resources/UniformBufferObjects.h"
 #include "Scene/Camera.h"
@@ -38,6 +41,102 @@
 
 #include <cstdlib>
 #include <array>
+#include <filesystem>
+
+/**
+ * @brief Per-mesh draw information for material-aware rendering.
+ */
+struct MeshDrawInfo {
+    uint32_t IndexOffset = 0;
+    uint32_t IndexCount = 0;
+    int32_t MaterialIndex = -1;
+};
+
+/**
+ * @brief Create a 1x1 white texture for use as default/fallback.
+ */
+Core::Ref<RHI::RHITexture> CreateDefaultWhiteTexture(const Core::Ref<RHI::RHIDevice>& device)
+{
+    RHI::TextureDesc texDesc;
+    texDesc.Width = 1;
+    texDesc.Height = 1;
+    texDesc.Format = VK_FORMAT_R8G8B8A8_UNORM;
+    texDesc.MipLevels = 1;
+    texDesc.DebugName = "Default White Texture";
+
+    auto texture = RHI::RHITexture::Create(device, texDesc);
+    if (texture) {
+        uint32_t whitePixel = 0xFFFFFFFF;
+        texture->UploadData(device, &whitePixel, sizeof(whitePixel));
+    }
+    return texture;
+}
+
+/**
+ * @brief Load textures for a model's materials.
+ * @param model The loaded model with MaterialData.
+ * @param device RHI device for texture creation.
+ * @param modelPath Path to the model file (for resolving relative texture paths).
+ * @return Vector of textures per material (5 textures per material: baseColor, normal, metallicRoughness, occlusion, emissive).
+ */
+std::vector<std::array<Core::Ref<RHI::RHITexture>, 5>> LoadMaterialTextures(
+    const Core::Ref<Resources::Model>& model,
+    const Core::Ref<RHI::RHIDevice>& device,
+    [[maybe_unused]] const std::string& modelPath)
+{
+    std::vector<std::array<Core::Ref<RHI::RHITexture>, 5>> materialTextures;
+
+    // Note: ModelLoader already stores full texture paths, so we use them directly
+
+    for (size_t i = 0; i < model->GetMaterialDataCount(); ++i) {
+        const auto& matData = model->GetMaterialData(i);
+        std::array<Core::Ref<RHI::RHITexture>, 5> textures = {nullptr, nullptr, nullptr, nullptr, nullptr};
+
+        // Base color texture (sRGB)
+        if (!matData.BaseColorTexturePath.empty()) {
+            textures[0] = RHI::RHITexture::LoadFromFile(device, matData.BaseColorTexturePath, true, true);
+            if (textures[0]) {
+                LOG_DEBUG("Loaded base color texture: {}", matData.BaseColorTexturePath);
+            }
+        }
+
+        // Normal map (linear)
+        if (!matData.NormalTexturePath.empty()) {
+            textures[1] = RHI::RHITexture::LoadFromFile(device, matData.NormalTexturePath, false, true);
+            if (textures[1]) {
+                LOG_DEBUG("Loaded normal texture: {}", matData.NormalTexturePath);
+            }
+        }
+
+        // Metallic-Roughness map (linear)
+        if (!matData.MetallicRoughnessTexturePath.empty()) {
+            textures[2] = RHI::RHITexture::LoadFromFile(device, matData.MetallicRoughnessTexturePath, false, true);
+            if (textures[2]) {
+                LOG_DEBUG("Loaded metallic-roughness texture: {}", matData.MetallicRoughnessTexturePath);
+            }
+        }
+
+        // Occlusion map (linear)
+        if (!matData.OcclusionTexturePath.empty()) {
+            textures[3] = RHI::RHITexture::LoadFromFile(device, matData.OcclusionTexturePath, false, true);
+            if (textures[3]) {
+                LOG_DEBUG("Loaded occlusion texture: {}", matData.OcclusionTexturePath);
+            }
+        }
+
+        // Emissive map (sRGB)
+        if (!matData.EmissiveTexturePath.empty()) {
+            textures[4] = RHI::RHITexture::LoadFromFile(device, matData.EmissiveTexturePath, true, true);
+            if (textures[4]) {
+                LOG_DEBUG("Loaded emissive texture: {}", matData.EmissiveTexturePath);
+            }
+        }
+
+        materialTextures.push_back(textures);
+    }
+
+    return materialTextures;
+}
 
 /**
  * @brief Recreate swapchain and related resources on window resize.
@@ -101,12 +200,19 @@ void TransitionImageLayout(
 }
 
 /**
- * @brief Load a new model and recreate GPU buffers.
+ * @brief Load a new model and recreate all GPU resources including materials.
  * @param filepath Path to the glTF/glb file.
  * @param device RHI device for buffer creation.
  * @param loadedModel Reference to model pointer (will be replaced).
  * @param vertexBuffer Reference to vertex buffer (will be recreated).
  * @param indexBuffer Reference to index buffer (will be recreated).
+ * @param meshDrawInfos Reference to mesh draw info list (will be recreated).
+ * @param materialTextures Reference to material textures (will be recreated).
+ * @param materialInstances Reference to material instances (will be recreated).
+ * @param materialDescriptorPool Reference to material descriptor pool (will be recreated).
+ * @param materialDescriptorLayout Material descriptor set layout (read-only).
+ * @param materialSampler Material sampler (read-only).
+ * @param defaultTexture Default white texture (read-only).
  * @param totalIndexCount Reference to total index count (will be updated).
  * @param camera Reference to camera (position will be updated).
  * @return true on success, false on failure.
@@ -117,10 +223,18 @@ bool LoadNewModel(
     Core::Ref<Resources::Model>& loadedModel,
     Core::Ref<RHI::RHIBuffer>& vertexBuffer,
     Core::Ref<RHI::RHIBuffer>& indexBuffer,
+    std::vector<MeshDrawInfo>& meshDrawInfos,
+    std::vector<std::array<Core::Ref<RHI::RHITexture>, 5>>& materialTextures,
+    std::vector<Core::Ref<Resources::MaterialInstance>>& materialInstances,
+    Core::Ref<Resources::MaterialInstance>& fallbackMaterial,
+    Core::Ref<RHI::RHIDescriptorPool>& materialDescriptorPool,
+    const Core::Ref<RHI::RHIDescriptorSetLayout>& materialDescriptorLayout,
+    const Core::Ref<RHI::RHISampler>& materialSampler,
+    const Core::Ref<RHI::RHITexture>& defaultTexture,
     uint32_t& totalIndexCount,
     Scene::Camera& camera)
 {
-    // Wait for GPU to finish using current buffers
+    // Wait for GPU to finish using current resources
     device->WaitIdle();
 
     // Load new model
@@ -134,9 +248,10 @@ bool LoadNewModel(
         return false;
     }
 
-    // Merge all meshes into single buffers
+    // Merge all meshes into single buffers and build draw info
     std::vector<Resources::Vertex> mergedVertices;
     std::vector<uint32_t> mergedIndices;
+    std::vector<MeshDrawInfo> newMeshDrawInfos;
 
     for (size_t meshIdx = 0; meshIdx < newModel->GetMeshCount(); ++meshIdx)
     {
@@ -145,13 +260,20 @@ bool LoadNewModel(
 
         mergedVertices.insert(mergedVertices.end(), mesh.Vertices.begin(), mesh.Vertices.end());
 
+        MeshDrawInfo drawInfo;
+        drawInfo.IndexOffset = static_cast<uint32_t>(mergedIndices.size());
+
         for (uint32_t index : mesh.Indices)
         {
             mergedIndices.push_back(vertexOffset + index);
         }
+
+        drawInfo.IndexCount = static_cast<uint32_t>(mesh.Indices.size());
+        drawInfo.MaterialIndex = mesh.MaterialIndex;
+        newMeshDrawInfos.push_back(drawInfo);
     }
 
-    // Create new vertex buffer (keep old buffers until success)
+    // Create new vertex buffer
     RHI::BufferDesc vertexDesc;
     vertexDesc.Size = sizeof(Resources::Vertex) * mergedVertices.size();
     vertexDesc.Usage = RHI::BufferUsage::Vertex;
@@ -181,12 +303,118 @@ bool LoadNewModel(
     }
     newIndexBuffer->SetData(mergedIndices.data(), indexDesc.Size);
 
-    // Success - now safe to replace old buffers with new ones
+    // Load textures for new model materials
+    auto newMaterialTextures = LoadMaterialTextures(newModel, device, filepath);
+    LOG_INFO("Loaded textures for {} materials", newMaterialTextures.size());
+
+    // Calculate pool size based on number of materials (+1 for fallback material)
+    size_t numMaterials = std::max(newModel->GetMaterialDataCount(), static_cast<size_t>(1));
+    size_t poolSize = numMaterials + 1; // +1 for fallback material
+
+    // Create new material descriptor pool
+    auto newMaterialDescriptorPool = RHI::RHIDescriptorPool::Create(
+        device,
+        static_cast<uint32_t>(poolSize),
+        {
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, static_cast<uint32_t>(poolSize)},
+            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, static_cast<uint32_t>(poolSize * 5)}
+        });
+
+    if (!newMaterialDescriptorPool)
+    {
+        LOG_ERROR("Failed to create material descriptor pool for new model");
+        return false;
+    }
+
+    // Create new material instances
+    // Reserve space to maintain index alignment with material data
+    std::vector<Core::Ref<Resources::MaterialInstance>> newMaterialInstances;
+    newMaterialInstances.reserve(newModel->GetMaterialDataCount());
+
+    // Create a fallback material first (used when individual material creation fails)
+    auto newFallbackMaterial = Resources::MaterialInstance::Create(
+        device, newMaterialDescriptorPool, materialDescriptorLayout, materialSampler, defaultTexture);
+    if (!newFallbackMaterial)
+    {
+        LOG_ERROR("Failed to create fallback material for new model");
+        return false;
+    }
+    newFallbackMaterial->SetBaseColor(glm::vec4(0.8f, 0.8f, 0.8f, 1.0f));
+    newFallbackMaterial->SetRoughness(0.5f);
+
+    for (size_t i = 0; i < newModel->GetMaterialDataCount(); ++i)
+    {
+        const auto& matData = newModel->GetMaterialData(i);
+        const auto& textures = newMaterialTextures[i];
+
+        auto matInstance = Resources::MaterialInstance::Create(
+            device, newMaterialDescriptorPool, materialDescriptorLayout, materialSampler, defaultTexture);
+
+        if (!matInstance)
+        {
+            LOG_ERROR("Failed to create material instance {}, using fallback", i);
+            // Push fallback to maintain index alignment
+            newMaterialInstances.push_back(newFallbackMaterial);
+            continue;
+        }
+
+        // Set material parameters from glTF data
+        matInstance->SetBaseColor(glm::vec4(
+            matData.BaseColorFactor[0],
+            matData.BaseColorFactor[1],
+            matData.BaseColorFactor[2],
+            matData.BaseColorFactor[3]));
+        matInstance->SetMetallic(matData.MetallicFactor);
+        matInstance->SetRoughness(matData.RoughnessFactor);
+        matInstance->SetEmissiveFactor(glm::vec3(
+            matData.EmissiveFactor[0],
+            matData.EmissiveFactor[1],
+            matData.EmissiveFactor[2]));
+
+        if (matData.Alpha == Resources::MaterialData::AlphaMode::Mask)
+        {
+            matInstance->SetAlphaCutoff(matData.AlphaCutoff);
+        }
+
+        // Bind textures
+        if (textures[0]) matInstance->SetTexture(Resources::TextureSlot::BaseColor, textures[0]);
+        if (textures[1]) matInstance->SetTexture(Resources::TextureSlot::Normal, textures[1]);
+        if (textures[2]) matInstance->SetTexture(Resources::TextureSlot::MetallicRoughness, textures[2]);
+        if (textures[3]) matInstance->SetTexture(Resources::TextureSlot::Occlusion, textures[3]);
+        if (textures[4]) matInstance->SetTexture(Resources::TextureSlot::Emissive, textures[4]);
+
+        newMaterialInstances.push_back(matInstance);
+        LOG_DEBUG("Created material instance: {}", matData.Name);
+    }
+
+    // If no materials exist in model, add the fallback as the only material
+    if (newMaterialInstances.empty() && newFallbackMaterial)
+    {
+        newMaterialInstances.push_back(newFallbackMaterial);
+    }
+
+    LOG_INFO("Created {} material instances", newMaterialInstances.size());
+
+    // Clear old resources (GPU is idle, safe to destroy)
+    // Order matters: clear instances first, then fallback, then textures, then pool
+    materialInstances.clear();
+    fallbackMaterial.reset();
+    for (auto& texArr : materialTextures) {
+        for (auto& tex : texArr) tex.reset();
+    }
+    materialTextures.clear();
+    materialDescriptorPool.reset();
+
+    // Assign new resources
     vertexBuffer = std::move(newVertexBuffer);
     indexBuffer = std::move(newIndexBuffer);
-
-    // Update total index count
+    meshDrawInfos = std::move(newMeshDrawInfos);
+    materialTextures = std::move(newMaterialTextures);
+    materialInstances = std::move(newMaterialInstances);
+    fallbackMaterial = std::move(newFallbackMaterial);
+    materialDescriptorPool = std::move(newMaterialDescriptorPool);
     totalIndexCount = static_cast<uint32_t>(mergedIndices.size());
+    loadedModel = newModel;
 
     // Update camera position for new model bounds
     const auto& bounds = newModel->GetBounds();
@@ -200,9 +428,6 @@ bool LoadNewModel(
 
     camera.SetPosition(center + glm::vec3(0.0f, maxExtent * 0.5f, cameraDistance));
     camera.LookAt(center);
-
-    // Assign new model
-    loadedModel = newModel;
 
     LOG_INFO("Model loaded: {} ({} meshes, {} vertices, {} triangles)",
              loadedModel->GetName(),
@@ -344,12 +569,12 @@ int main()
     // =========================================================================
     // Model Loading
     // =========================================================================
+    std::string modelPath = "assets/models/a_contortionist_dancer/scene.gltf";
+
     Resources::ModelLoadOptions modelOptions;
     modelOptions.CalculateTangents = true;
 
-    auto loadedModel = Resources::ModelLoader::LoadGLTF(
-        "assets/models/a_contortionist_dancer/scene.gltf",
-        modelOptions);
+    auto loadedModel = Resources::ModelLoader::LoadGLTF(modelPath, modelOptions);
 
     if (!loadedModel || loadedModel->GetMeshCount() == 0)
     {
@@ -357,22 +582,25 @@ int main()
         return EXIT_FAILURE;
     }
 
-    LOG_INFO("Model loaded: {} ({} meshes, {} vertices, {} triangles)",
+    LOG_INFO("Model loaded: {} ({} meshes, {} materials, {} vertices, {} triangles)",
              loadedModel->GetName(),
              loadedModel->GetMeshCount(),
+             loadedModel->GetMaterialDataCount(),
              loadedModel->GetTotalVertexCount(),
              loadedModel->GetTotalIndexCount() / 3);
 
     // =========================================================================
-    // Model Buffers (merge all meshes into single buffer)
+    // Model Buffers (merge all meshes but track per-mesh draw info)
     // =========================================================================
     std::vector<Resources::Vertex> mergedVertices;
     std::vector<uint32_t> mergedIndices;
+    std::vector<MeshDrawInfo> meshDrawInfos;
 
     for (size_t meshIdx = 0; meshIdx < loadedModel->GetMeshCount(); ++meshIdx)
     {
         const auto& mesh = loadedModel->GetMesh(meshIdx);
         uint32_t vertexOffset = static_cast<uint32_t>(mergedVertices.size());
+        uint32_t indexOffset = static_cast<uint32_t>(mergedIndices.size());
 
         // Add vertices
         mergedVertices.insert(mergedVertices.end(), mesh.Vertices.begin(), mesh.Vertices.end());
@@ -382,6 +610,13 @@ int main()
         {
             mergedIndices.push_back(vertexOffset + index);
         }
+
+        // Track draw info for this mesh
+        MeshDrawInfo drawInfo;
+        drawInfo.IndexOffset = indexOffset;
+        drawInfo.IndexCount = static_cast<uint32_t>(mesh.Indices.size());
+        drawInfo.MaterialIndex = mesh.MaterialIndex;
+        meshDrawInfos.push_back(drawInfo);
     }
 
     // Vertex buffer
@@ -418,6 +653,128 @@ int main()
 
     // Store total index count for drawing
     uint32_t totalIndexCount = static_cast<uint32_t>(mergedIndices.size());
+
+    // =========================================================================
+    // Material System Setup
+    // =========================================================================
+
+    // Create default white texture for unbound slots
+    auto defaultTexture = CreateDefaultWhiteTexture(device);
+    if (!defaultTexture)
+    {
+        LOG_FATAL("Failed to create default white texture!");
+        return EXIT_FAILURE;
+    }
+    LOG_INFO("Default white texture created");
+
+    // Create sampler for material textures
+    auto materialSampler = RHI::RHISampler::CreateLinear(device);
+    if (!materialSampler)
+    {
+        LOG_FATAL("Failed to create material sampler!");
+        return EXIT_FAILURE;
+    }
+    LOG_INFO("Material sampler created");
+
+    // Load textures from model materials
+    auto materialTextures = LoadMaterialTextures(loadedModel, device, modelPath);
+    LOG_INFO("Loaded textures for {} materials", materialTextures.size());
+
+    // Create material descriptor set layout
+    auto materialDescriptorLayout = Resources::MaterialInstance::CreateDescriptorSetLayout(device);
+    if (!materialDescriptorLayout)
+    {
+        LOG_FATAL("Failed to create material descriptor set layout!");
+        return EXIT_FAILURE;
+    }
+
+    // Calculate pool size based on number of materials (+1 for fallback material)
+    size_t numMaterials = std::max(loadedModel->GetMaterialDataCount(), static_cast<size_t>(1));
+    size_t poolSize = numMaterials + 1; // +1 for fallback material
+
+    // Create material descriptor pool
+    auto materialDescriptorPool = RHI::RHIDescriptorPool::Create(
+        device,
+        static_cast<uint32_t>(poolSize),
+        {
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, static_cast<uint32_t>(poolSize)},
+            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, static_cast<uint32_t>(poolSize * 5)}
+        });
+
+    if (!materialDescriptorPool)
+    {
+        LOG_FATAL("Failed to create material descriptor pool!");
+        return EXIT_FAILURE;
+    }
+
+    // Create material instances
+    // Reserve space to maintain index alignment with material data
+    std::vector<Core::Ref<Resources::MaterialInstance>> materialInstances;
+    materialInstances.reserve(loadedModel->GetMaterialDataCount());
+
+    // Create a fallback material first (used when individual material creation fails)
+    auto fallbackMaterial = Resources::MaterialInstance::Create(
+        device, materialDescriptorPool, materialDescriptorLayout, materialSampler, defaultTexture);
+    if (!fallbackMaterial)
+    {
+        LOG_FATAL("Failed to create fallback material!");
+        return EXIT_FAILURE;
+    }
+    fallbackMaterial->SetBaseColor(glm::vec4(0.7f, 0.7f, 0.7f, 1.0f));
+    fallbackMaterial->SetRoughness(0.5f);
+
+    for (size_t i = 0; i < loadedModel->GetMaterialDataCount(); ++i)
+    {
+        const auto& matData = loadedModel->GetMaterialData(i);
+        const auto& textures = materialTextures[i];
+
+        auto matInstance = Resources::MaterialInstance::Create(
+            device, materialDescriptorPool, materialDescriptorLayout, materialSampler, defaultTexture);
+
+        if (!matInstance)
+        {
+            LOG_ERROR("Failed to create material instance {}, using fallback", i);
+            // Push fallback to maintain index alignment
+            materialInstances.push_back(fallbackMaterial);
+            continue;
+        }
+
+        // Set material parameters from glTF data
+        matInstance->SetBaseColor(glm::vec4(
+            matData.BaseColorFactor[0],
+            matData.BaseColorFactor[1],
+            matData.BaseColorFactor[2],
+            matData.BaseColorFactor[3]));
+        matInstance->SetMetallic(matData.MetallicFactor);
+        matInstance->SetRoughness(matData.RoughnessFactor);
+        matInstance->SetEmissiveFactor(glm::vec3(
+            matData.EmissiveFactor[0],
+            matData.EmissiveFactor[1],
+            matData.EmissiveFactor[2]));
+
+        if (matData.Alpha == Resources::MaterialData::AlphaMode::Mask)
+        {
+            matInstance->SetAlphaCutoff(matData.AlphaCutoff);
+        }
+
+        // Bind textures
+        if (textures[0]) matInstance->SetTexture(Resources::TextureSlot::BaseColor, textures[0]);
+        if (textures[1]) matInstance->SetTexture(Resources::TextureSlot::Normal, textures[1]);
+        if (textures[2]) matInstance->SetTexture(Resources::TextureSlot::MetallicRoughness, textures[2]);
+        if (textures[3]) matInstance->SetTexture(Resources::TextureSlot::Occlusion, textures[3]);
+        if (textures[4]) matInstance->SetTexture(Resources::TextureSlot::Emissive, textures[4]);
+
+        materialInstances.push_back(matInstance);
+        LOG_DEBUG("Created material instance: {}", matData.Name);
+    }
+
+    // If no materials exist in model, add the fallback as the only material
+    if (materialInstances.empty() && fallbackMaterial)
+    {
+        materialInstances.push_back(fallbackMaterial);
+    }
+
+    LOG_INFO("Created {} material instances", materialInstances.size());
 
     // =========================================================================
     // Camera and Uniform Buffers
@@ -539,14 +896,14 @@ int main()
 
     auto fragmentShader = RHI::RHIShader::CreateFromHLSL(
         device,
-        "shaders/hlsl/pixel/model.hlsl",
+        "shaders/hlsl/pixel/model_pbr.hlsl",
         RHI::ShaderStage::Fragment);
     if (!fragmentShader)
     {
         LOG_FATAL("Failed to create fragment shader!");
         return EXIT_FAILURE;
     }
-    LOG_INFO("Fragment shader loaded");
+    LOG_INFO("Fragment shader (PBR) loaded");
 
     // =========================================================================
     // Graphics Pipeline
@@ -583,8 +940,9 @@ int main()
     pipelineDesc.ColorAttachmentFormats.push_back(swapchain->GetImageFormat());
     pipelineDesc.DepthAttachmentFormat = depthBuffer->GetFormat();
 
-    // Descriptor set layout
+    // Descriptor set layouts: Set 0 = scene data, Set 1 = material data
     pipelineDesc.DescriptorSetLayouts.push_back(descriptorLayout->GetHandle());
+    pipelineDesc.DescriptorSetLayouts.push_back(materialDescriptorLayout->GetHandle());
 
     auto pipeline = RHI::RHIPipeline::CreateGraphics(device, pipelineDesc);
     if (!pipeline)
@@ -796,7 +1154,7 @@ int main()
 
         stats.FrameTime = frameTimer.GetFrameTimeMs();
         stats.FPS = frameTimer.GetFPS();
-        stats.DrawCalls = 1;
+        stats.DrawCalls = static_cast<uint32_t>(meshDrawInfos.size());
         stats.TriangleCount = totalIndexCount / 3;
 
         imguiRenderer->ShowStatsWindow(stats, &showStatsWindow);
@@ -819,7 +1177,11 @@ int main()
                 if (filePath.has_value())
                 {
                     if (!LoadNewModel(filePath.value(), device, loadedModel,
-                                      vertexBuffer, indexBuffer, totalIndexCount, camera))
+                                      vertexBuffer, indexBuffer, meshDrawInfos,
+                                      materialTextures, materialInstances, fallbackMaterial,
+                                      materialDescriptorPool, materialDescriptorLayout,
+                                      materialSampler, defaultTexture,
+                                      totalIndexCount, camera))
                     {
                         LOG_ERROR("Failed to load model from file dialog");
                     }
@@ -891,7 +1253,7 @@ int main()
         scissor.extent = extent;
         cmdBuffer->SetScissor(scissor);
 
-        // Bind pipeline and draw
+        // Bind pipeline and scene data
         cmdBuffer->BindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->GetHandle());
         cmdBuffer->BindDescriptorSets(
             VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -900,7 +1262,39 @@ int main()
             {descriptorSets[frameIndex]->GetHandle()});
         cmdBuffer->BindVertexBuffer(vertexBuffer->GetHandle());
         cmdBuffer->BindIndexBuffer(indexBuffer->GetHandle(), VK_INDEX_TYPE_UINT32);
-        cmdBuffer->DrawIndexed(totalIndexCount);
+
+        // Draw each mesh with its material
+        for (const auto& drawInfo : meshDrawInfos)
+        {
+            // Get material for this mesh
+            int materialIdx = drawInfo.MaterialIndex;
+            if (materialIdx >= 0 && materialIdx < static_cast<int>(materialInstances.size()))
+            {
+                auto& material = materialInstances[materialIdx];
+                material->UploadToGPU();
+
+                // Bind material descriptor set at set 1
+                cmdBuffer->BindDescriptorSets(
+                    VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    pipeline->GetLayout(),
+                    1,
+                    {material->GetDescriptorSet()->GetHandle()});
+            }
+            else if (!materialInstances.empty())
+            {
+                // Use first material as fallback
+                auto& material = materialInstances[0];
+                material->UploadToGPU();
+                cmdBuffer->BindDescriptorSets(
+                    VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    pipeline->GetLayout(),
+                    1,
+                    {material->GetDescriptorSet()->GetHandle()});
+            }
+
+            // Draw this mesh
+            cmdBuffer->DrawIndexed(drawInfo.IndexCount, 1, drawInfo.IndexOffset, 0, 0);
+        }
 
         cmdBuffer->EndRendering();
 
@@ -978,6 +1372,19 @@ int main()
     for (auto& ds : descriptorSets) ds.reset();
     descriptorPool.reset();
     descriptorLayout.reset();
+
+    // Material system cleanup
+    // Order matters: clear instances first, then fallback, then textures, then pool
+    materialInstances.clear();
+    fallbackMaterial.reset();
+    for (auto& texArr : materialTextures) {
+        for (auto& tex : texArr) tex.reset();
+    }
+    materialTextures.clear();
+    materialDescriptorPool.reset();
+    materialDescriptorLayout.reset();
+    materialSampler.reset();
+    defaultTexture.reset();
 
     for (auto& ubo : objectUBOs) ubo.reset();
     for (auto& ubo : cameraUBOs) ubo.reset();
