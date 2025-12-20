@@ -226,6 +226,7 @@ bool LoadNewModel(
     std::vector<MeshDrawInfo>& meshDrawInfos,
     std::vector<std::array<Core::Ref<RHI::RHITexture>, 5>>& materialTextures,
     std::vector<Core::Ref<Resources::MaterialInstance>>& materialInstances,
+    Core::Ref<Resources::MaterialInstance>& fallbackMaterial,
     Core::Ref<RHI::RHIDescriptorPool>& materialDescriptorPool,
     const Core::Ref<RHI::RHIDescriptorSetLayout>& materialDescriptorLayout,
     const Core::Ref<RHI::RHISampler>& materialSampler,
@@ -306,16 +307,17 @@ bool LoadNewModel(
     auto newMaterialTextures = LoadMaterialTextures(newModel, device, filepath);
     LOG_INFO("Loaded textures for {} materials", newMaterialTextures.size());
 
-    // Calculate pool size based on number of materials
+    // Calculate pool size based on number of materials (+1 for fallback material)
     size_t numMaterials = std::max(newModel->GetMaterialDataCount(), static_cast<size_t>(1));
+    size_t poolSize = numMaterials + 1; // +1 for fallback material
 
     // Create new material descriptor pool
     auto newMaterialDescriptorPool = RHI::RHIDescriptorPool::Create(
         device,
-        static_cast<uint32_t>(numMaterials),
+        static_cast<uint32_t>(poolSize),
         {
-            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, static_cast<uint32_t>(numMaterials)},
-            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, static_cast<uint32_t>(numMaterials * 5)}
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, static_cast<uint32_t>(poolSize)},
+            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, static_cast<uint32_t>(poolSize * 5)}
         });
 
     if (!newMaterialDescriptorPool)
@@ -330,12 +332,12 @@ bool LoadNewModel(
     newMaterialInstances.reserve(newModel->GetMaterialDataCount());
 
     // Create a fallback material first (used when individual material creation fails)
-    auto fallbackMaterial = Resources::MaterialInstance::Create(
+    auto newFallbackMaterial = Resources::MaterialInstance::Create(
         device, newMaterialDescriptorPool, materialDescriptorLayout, materialSampler, defaultTexture);
-    if (fallbackMaterial)
+    if (newFallbackMaterial)
     {
-        fallbackMaterial->SetBaseColor(glm::vec4(0.8f, 0.8f, 0.8f, 1.0f));
-        fallbackMaterial->SetRoughness(0.5f);
+        newFallbackMaterial->SetBaseColor(glm::vec4(0.8f, 0.8f, 0.8f, 1.0f));
+        newFallbackMaterial->SetRoughness(0.5f);
     }
 
     for (size_t i = 0; i < newModel->GetMaterialDataCount(); ++i)
@@ -350,7 +352,7 @@ bool LoadNewModel(
         {
             LOG_ERROR("Failed to create material instance {}, using fallback", i);
             // Push fallback to maintain index alignment
-            newMaterialInstances.push_back(fallbackMaterial);
+            newMaterialInstances.push_back(newFallbackMaterial);
             continue;
         }
 
@@ -380,15 +382,17 @@ bool LoadNewModel(
     }
 
     // If no materials exist in model, add the fallback as the only material
-    if (newMaterialInstances.empty() && fallbackMaterial)
+    if (newMaterialInstances.empty() && newFallbackMaterial)
     {
-        newMaterialInstances.push_back(fallbackMaterial);
+        newMaterialInstances.push_back(newFallbackMaterial);
     }
 
     LOG_INFO("Created {} material instances", newMaterialInstances.size());
 
     // Clear old resources (GPU is idle, safe to destroy)
+    // Order matters: clear instances first, then fallback, then textures, then pool
     materialInstances.clear();
+    fallbackMaterial.reset();
     for (auto& texArr : materialTextures) {
         for (auto& tex : texArr) tex.reset();
     }
@@ -401,6 +405,7 @@ bool LoadNewModel(
     meshDrawInfos = std::move(newMeshDrawInfos);
     materialTextures = std::move(newMaterialTextures);
     materialInstances = std::move(newMaterialInstances);
+    fallbackMaterial = std::move(newFallbackMaterial);
     materialDescriptorPool = std::move(newMaterialDescriptorPool);
     totalIndexCount = static_cast<uint32_t>(mergedIndices.size());
     loadedModel = newModel;
@@ -677,16 +682,17 @@ int main()
         return EXIT_FAILURE;
     }
 
-    // Calculate pool size based on number of materials
+    // Calculate pool size based on number of materials (+1 for fallback material)
     size_t numMaterials = std::max(loadedModel->GetMaterialDataCount(), static_cast<size_t>(1));
+    size_t poolSize = numMaterials + 1; // +1 for fallback material
 
     // Create material descriptor pool
     auto materialDescriptorPool = RHI::RHIDescriptorPool::Create(
         device,
-        static_cast<uint32_t>(numMaterials),
+        static_cast<uint32_t>(poolSize),
         {
-            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, static_cast<uint32_t>(numMaterials)},
-            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, static_cast<uint32_t>(numMaterials * 5)}
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, static_cast<uint32_t>(poolSize)},
+            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, static_cast<uint32_t>(poolSize * 5)}
         });
 
     if (!materialDescriptorPool)
@@ -1164,8 +1170,9 @@ int main()
                 {
                     if (!LoadNewModel(filePath.value(), device, loadedModel,
                                       vertexBuffer, indexBuffer, meshDrawInfos,
-                                      materialTextures, materialInstances, materialDescriptorPool,
-                                      materialDescriptorLayout, materialSampler, defaultTexture,
+                                      materialTextures, materialInstances, fallbackMaterial,
+                                      materialDescriptorPool, materialDescriptorLayout,
+                                      materialSampler, defaultTexture,
                                       totalIndexCount, camera))
                     {
                         LOG_ERROR("Failed to load model from file dialog");
@@ -1359,13 +1366,15 @@ int main()
     descriptorLayout.reset();
 
     // Material system cleanup
+    // Order matters: clear instances first, then fallback, then textures, then pool
     materialInstances.clear();
-    materialDescriptorPool.reset();
-    materialDescriptorLayout.reset();
+    fallbackMaterial.reset();
     for (auto& texArr : materialTextures) {
         for (auto& tex : texArr) tex.reset();
     }
     materialTextures.clear();
+    materialDescriptorPool.reset();
+    materialDescriptorLayout.reset();
     materialSampler.reset();
     defaultTexture.reset();
 
