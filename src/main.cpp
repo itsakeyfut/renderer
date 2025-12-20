@@ -325,7 +325,18 @@ bool LoadNewModel(
     }
 
     // Create new material instances
+    // Reserve space to maintain index alignment with material data
     std::vector<Core::Ref<Resources::MaterialInstance>> newMaterialInstances;
+    newMaterialInstances.reserve(newModel->GetMaterialDataCount());
+
+    // Create a fallback material first (used when individual material creation fails)
+    auto fallbackMaterial = Resources::MaterialInstance::Create(
+        device, newMaterialDescriptorPool, materialDescriptorLayout, materialSampler, defaultTexture);
+    if (fallbackMaterial)
+    {
+        fallbackMaterial->SetBaseColor(glm::vec4(0.8f, 0.8f, 0.8f, 1.0f));
+        fallbackMaterial->SetRoughness(0.5f);
+    }
 
     for (size_t i = 0; i < newModel->GetMaterialDataCount(); ++i)
     {
@@ -337,7 +348,9 @@ bool LoadNewModel(
 
         if (!matInstance)
         {
-            LOG_ERROR("Failed to create material instance {}", i);
+            LOG_ERROR("Failed to create material instance {}, using fallback", i);
+            // Push fallback to maintain index alignment
+            newMaterialInstances.push_back(fallbackMaterial);
             continue;
         }
 
@@ -366,17 +379,10 @@ bool LoadNewModel(
         LOG_DEBUG("Created material instance: {}", matData.Name);
     }
 
-    // Create a default material if no materials exist
-    if (newMaterialInstances.empty())
+    // If no materials exist in model, add the fallback as the only material
+    if (newMaterialInstances.empty() && fallbackMaterial)
     {
-        auto defaultMat = Resources::MaterialInstance::Create(
-            device, newMaterialDescriptorPool, materialDescriptorLayout, materialSampler, defaultTexture);
-        if (defaultMat)
-        {
-            defaultMat->SetBaseColor(glm::vec4(0.8f, 0.8f, 0.8f, 1.0f));
-            defaultMat->SetRoughness(0.5f);
-            newMaterialInstances.push_back(defaultMat);
-        }
+        newMaterialInstances.push_back(fallbackMaterial);
     }
 
     LOG_INFO("Created {} material instances", newMaterialInstances.size());
@@ -690,7 +696,18 @@ int main()
     }
 
     // Create material instances
+    // Reserve space to maintain index alignment with material data
     std::vector<Core::Ref<Resources::MaterialInstance>> materialInstances;
+    materialInstances.reserve(loadedModel->GetMaterialDataCount());
+
+    // Create a fallback material first (used when individual material creation fails)
+    auto fallbackMaterial = Resources::MaterialInstance::Create(
+        device, materialDescriptorPool, materialDescriptorLayout, materialSampler, defaultTexture);
+    if (fallbackMaterial)
+    {
+        fallbackMaterial->SetBaseColor(glm::vec4(0.7f, 0.7f, 0.7f, 1.0f));
+        fallbackMaterial->SetRoughness(0.5f);
+    }
 
     for (size_t i = 0; i < loadedModel->GetMaterialDataCount(); ++i)
     {
@@ -702,7 +719,9 @@ int main()
 
         if (!matInstance)
         {
-            LOG_ERROR("Failed to create material instance {}", i);
+            LOG_ERROR("Failed to create material instance {}, using fallback", i);
+            // Push fallback to maintain index alignment
+            materialInstances.push_back(fallbackMaterial);
             continue;
         }
 
@@ -735,17 +754,10 @@ int main()
         LOG_DEBUG("Created material instance: {}", matData.Name);
     }
 
-    // Create a default material if no materials exist
-    if (materialInstances.empty())
+    // If no materials exist in model, add the fallback as the only material
+    if (materialInstances.empty() && fallbackMaterial)
     {
-        auto defaultMat = Resources::MaterialInstance::Create(
-            device, materialDescriptorPool, materialDescriptorLayout, materialSampler, defaultTexture);
-        if (defaultMat)
-        {
-            defaultMat->SetBaseColor(glm::vec4(0.7f, 0.7f, 0.7f, 1.0f));
-            defaultMat->SetRoughness(0.5f);
-            materialInstances.push_back(defaultMat);
-        }
+        materialInstances.push_back(fallbackMaterial);
     }
 
     LOG_INFO("Created {} material instances", materialInstances.size());
