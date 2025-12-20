@@ -225,6 +225,7 @@ target_link_libraries(Platform PUBLIC Core glfw ${VULKAN_TARGET})
 
 # RHI library
 set(RHI_SOURCES
+    src/RHI/MipmapGenerator.cpp
     src/RHI/RHIBuffer.cpp
     src/RHI/RHICommandBuffer.cpp
     src/RHI/RHICommandPool.cpp
@@ -247,6 +248,7 @@ set(RHI_SOURCES
 )
 
 set(RHI_HEADERS
+    src/RHI/MipmapGenerator.h
     src/RHI/RHIBuffer.h
     src/RHI/RHICommandBuffer.h
     src/RHI/RHICommandPool.h
@@ -480,6 +482,11 @@ if(BUILD_TESTS)
     add_executable(TestAsyncResourceLoader tests/TestAsyncResourceLoader.cpp)
     target_link_libraries(TestAsyncResourceLoader PRIVATE Resources Core GTest::gtest_main)
     gtest_discover_tests(TestAsyncResourceLoader)
+
+    # MipmapGenerator test
+    add_executable(TestMipmapGenerator tests/TestMipmapGenerator.cpp)
+    target_link_libraries(TestMipmapGenerator PRIVATE RHI Platform Core GTest::gtest_main)
+    gtest_discover_tests(TestMipmapGenerator)
 endif()
 
 # =============================================================================
