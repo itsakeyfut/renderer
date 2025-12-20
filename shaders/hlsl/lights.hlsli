@@ -81,10 +81,84 @@ float CalculateSpotAttenuation(float3 lightDir, float3 spotDir, float innerCos, 
 }
 
 // ============================================================================
+// Blinn-Phong Shading Functions
+// ============================================================================
+
+// Calculate Blinn-Phong lighting contribution
+// lightDir: normalized direction from surface to light
+// viewDir: normalized direction from surface to camera
+// normal: normalized surface normal (world space)
+// lightColor: RGB color of the light
+// albedo: surface diffuse color
+// shininess: specular exponent (higher = tighter highlight)
+// Returns: diffuse + specular contribution
+float3 CalculateBlinnPhong(
+    float3 lightDir,
+    float3 viewDir,
+    float3 normal,
+    float3 lightColor,
+    float3 albedo,
+    float shininess)
+{
+    // Diffuse (Lambertian)
+    float NdotL = max(dot(normal, lightDir), 0.0);
+    float3 diffuse = NdotL * lightColor * albedo;
+
+    // Specular (Blinn-Phong)
+    float3 halfDir = normalize(lightDir + viewDir);
+    float NdotH = max(dot(normal, halfDir), 0.0);
+    float3 specular = pow(NdotH, shininess) * lightColor;
+
+    return diffuse + specular;
+}
+
+// Calculate only diffuse component (Lambertian)
+float3 CalculateBlinnPhongDiffuse(
+    float3 lightDir,
+    float3 normal,
+    float3 lightColor,
+    float3 albedo)
+{
+    float NdotL = max(dot(normal, lightDir), 0.0);
+    return NdotL * lightColor * albedo;
+}
+
+// Calculate only specular component (Blinn-Phong)
+float3 CalculateBlinnPhongSpecular(
+    float3 lightDir,
+    float3 viewDir,
+    float3 normal,
+    float3 lightColor,
+    float shininess)
+{
+    float NdotL = max(dot(normal, lightDir), 0.0);
+
+    // No specular if surface faces away from light
+    if (NdotL <= 0.0)
+        return float3(0.0, 0.0, 0.0);
+
+    float3 halfDir = normalize(lightDir + viewDir);
+    float NdotH = max(dot(normal, halfDir), 0.0);
+    return pow(NdotH, shininess) * lightColor;
+}
+
+// Convert roughness to shininess for Blinn-Phong
+// roughness: 0 (smooth/shiny) to 1 (rough/matte)
+// Returns: shininess exponent for pow()
+float RoughnessToShininess(float roughness)
+{
+    // Map roughness 0..1 to shininess 2048..2
+    // roughness 0 -> shininess 2048 (mirror-like)
+    // roughness 1 -> shininess 2 (very matte)
+    float r = clamp(roughness, 0.01, 1.0);
+    return 2.0 / (r * r) - 2.0;
+}
+
+// ============================================================================
 // Light Calculation Helpers
 // ============================================================================
 
-// Calculate directional light contribution
+// Calculate directional light contribution using Blinn-Phong
 float3 CalculateDirectionalLight(
     DirectionalLight light,
     float3 normal,
@@ -94,15 +168,13 @@ float3 CalculateDirectionalLight(
     float metallic)
 {
     float3 lightDir = normalize(-light.Direction);
-    float NdotL = max(dot(normal, lightDir), 0.0);
+    float3 lightColor = light.Color * light.Intensity;
+    float shininess = RoughnessToShininess(roughness);
 
-    // Simple Lambertian diffuse
-    float3 diffuse = albedo * NdotL;
-
-    return diffuse * light.Color * light.Intensity;
+    return CalculateBlinnPhong(lightDir, viewDir, normal, lightColor, albedo, shininess);
 }
 
-// Calculate point light contribution
+// Calculate point light contribution using Blinn-Phong
 float3 CalculatePointLight(
     PointLight light,
     float3 worldPos,
@@ -117,15 +189,13 @@ float3 CalculatePointLight(
     float3 lightDir = lightVec / distance;
 
     float attenuation = CalculateAttenuation(distance, light.Radius);
-    float NdotL = max(dot(normal, lightDir), 0.0);
+    float3 lightColor = light.Color * light.Intensity * attenuation;
+    float shininess = RoughnessToShininess(roughness);
 
-    // Simple Lambertian diffuse
-    float3 diffuse = albedo * NdotL;
-
-    return diffuse * light.Color * light.Intensity * attenuation;
+    return CalculateBlinnPhong(lightDir, viewDir, normal, lightColor, albedo, shininess);
 }
 
-// Calculate spot light contribution
+// Calculate spot light contribution using Blinn-Phong
 float3 CalculateSpotLight(
     SpotLight light,
     float3 worldPos,
@@ -150,12 +220,10 @@ float3 CalculateSpotLight(
         light.InnerConeAngle,
         light.OuterConeAngle);
 
-    float NdotL = max(dot(normal, lightDir), 0.0);
+    float3 lightColor = light.Color * light.Intensity * distanceAttenuation * spotAttenuation;
+    float shininess = RoughnessToShininess(roughness);
 
-    // Simple Lambertian diffuse
-    float3 diffuse = albedo * NdotL;
-
-    return diffuse * light.Color * light.Intensity * distanceAttenuation * spotAttenuation;
+    return CalculateBlinnPhong(lightDir, viewDir, normal, lightColor, albedo, shininess);
 }
 
 #endif // LIGHTS_HLSLI
