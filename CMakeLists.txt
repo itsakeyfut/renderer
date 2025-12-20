@@ -277,6 +277,7 @@ target_link_libraries(RHI PUBLIC Core Platform ${VULKAN_TARGET} GPUOpen::VulkanM
 # Resources library
 set(RESOURCES_SOURCES
     src/Resources/AsyncResourceLoader.cpp
+    src/Resources/MaterialInstance.cpp
     src/Resources/ModelLoader.cpp
     src/Resources/ResourceManager.cpp
     src/Resources/TextureLoader.cpp
@@ -284,14 +285,15 @@ set(RESOURCES_SOURCES
 
 set(RESOURCES_HEADERS
     src/Resources/AsyncResourceLoader.h
-    src/Resources/ResourceHandle.h
-    src/Resources/ResourcePool.h
-    src/Resources/ResourceManager.h
-    src/Resources/ModelLoader.h
-    src/Resources/TextureLoader.h
-    src/Resources/Texture.h
-    src/Resources/Model.h
     src/Resources/Material.h
+    src/Resources/MaterialInstance.h
+    src/Resources/Model.h
+    src/Resources/ModelLoader.h
+    src/Resources/ResourceHandle.h
+    src/Resources/ResourceManager.h
+    src/Resources/ResourcePool.h
+    src/Resources/Texture.h
+    src/Resources/TextureLoader.h
     src/Resources/UniformBufferObjects.h
     src/Resources/Vertex.h
 )
@@ -487,6 +489,11 @@ if(BUILD_TESTS)
     add_executable(TestMipmapGenerator tests/TestMipmapGenerator.cpp)
     target_link_libraries(TestMipmapGenerator PRIVATE RHI Platform Core GTest::gtest_main)
     gtest_discover_tests(TestMipmapGenerator)
+
+    # MaterialInstance test
+    add_executable(TestMaterialInstance tests/TestMaterialInstance.cpp)
+    target_link_libraries(TestMaterialInstance PRIVATE Resources RHI Platform Core glm::glm GTest::gtest_main)
+    gtest_discover_tests(TestMaterialInstance)
 endif()
 
 # =============================================================================
