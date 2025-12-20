@@ -4,10 +4,12 @@
  *
  * Defines the three main light types: Directional, Point, and Spot lights.
  * These structures are designed to be GPU-compatible for uniform buffer usage.
+ * All structures follow std140 layout rules for Vulkan uniform buffers.
  */
 
 #pragma once
 
+#include <cstdint>
 #include <glm/glm.hpp>
 
 namespace Scene {
@@ -16,7 +18,17 @@ namespace Scene {
  * @brief Directional light representing infinitely distant light source.
  *
  * Used for sun/moon lighting. Has no position, only direction.
- * Memory layout is aligned for GPU uniform buffer usage.
+ * Memory layout is aligned for GPU uniform buffer usage (std140).
+ *
+ * HLSL equivalent:
+ * @code
+ * struct DirectionalLight {
+ *     float3 Direction;   // 12 bytes
+ *     float  Intensity;   // 4 bytes
+ *     float3 Color;       // 12 bytes
+ *     float  Padding;     // 4 bytes (16-byte alignment)
+ * };
+ * @endcode
  */
 struct DirectionalLight {
     glm::vec3 Direction = glm::vec3(0.0f, -1.0f, 0.0f);
@@ -47,7 +59,18 @@ struct DirectionalLight {
  * @brief Point light emitting light in all directions from a position.
  *
  * Attenuation is based on distance from the light position.
- * Memory layout is aligned for GPU uniform buffer usage.
+ * Inverse-square law attenuation is physically accurate.
+ * Memory layout is aligned for GPU uniform buffer usage (std140).
+ *
+ * HLSL equivalent:
+ * @code
+ * struct PointLight {
+ *     float3 Position;    // 12 bytes
+ *     float  Radius;      // 4 bytes
+ *     float3 Color;       // 12 bytes
+ *     float  Intensity;   // 4 bytes
+ * };
+ * @endcode
  */
 struct PointLight {
     glm::vec3 Position = glm::vec3(0.0f);
@@ -81,7 +104,20 @@ struct PointLight {
  * @brief Spot light emitting light in a cone from a position.
  *
  * Combines point light position with directional falloff.
- * Memory layout is aligned for GPU uniform buffer usage.
+ * Cone angles are stored as cosine values for efficient shader comparison.
+ * Memory layout is aligned for GPU uniform buffer usage (std140).
+ *
+ * HLSL equivalent:
+ * @code
+ * struct SpotLight {
+ *     float3 Position;        // 12 bytes
+ *     float  InnerConeAngle;  // 4 bytes (cos(angle))
+ *     float3 Direction;       // 12 bytes
+ *     float  OuterConeAngle;  // 4 bytes (cos(angle))
+ *     float3 Color;           // 12 bytes
+ *     float  Intensity;       // 4 bytes
+ * };
+ * @endcode
  */
 struct SpotLight {
     glm::vec3 Position = glm::vec3(0.0f);
@@ -124,6 +160,20 @@ struct SpotLight {
  *
  * Contains the directional light and counts for dynamic lights.
  * Used in conjunction with StructuredBuffers for point/spot lights.
+ * Designed to be bound to shader register b2.
+ *
+ * HLSL equivalent:
+ * @code
+ * cbuffer LightData : register(b2) {
+ *     DirectionalLight directionalLight;
+ *     uint numPointLights;
+ *     uint numSpotLights;
+ *     float2 padding;
+ * };
+ *
+ * StructuredBuffer<PointLight> pointLights : register(t0, space1);
+ * StructuredBuffer<SpotLight> spotLights : register(t1, space1);
+ * @endcode
  */
 struct LightUBO {
     DirectionalLight DirectionalLightData;
@@ -131,5 +181,16 @@ struct LightUBO {
     uint32_t NumSpotLights = 0;
     glm::vec2 Padding = glm::vec2(0.0f);
 };
+
+// Static assertions to verify light struct alignment (std140 layout)
+static_assert(sizeof(DirectionalLight) == 32, "DirectionalLight size must be 32 bytes for std140 layout");
+static_assert(sizeof(PointLight) == 32, "PointLight size must be 32 bytes for std140 layout");
+static_assert(sizeof(SpotLight) == 48, "SpotLight size must be 48 bytes for std140 layout");
+static_assert(sizeof(LightUBO) == 48, "LightUBO size must be 48 bytes for std140 layout");
+
+static_assert(alignof(DirectionalLight) <= 16, "DirectionalLight alignment must be 16 bytes or less");
+static_assert(alignof(PointLight) <= 16, "PointLight alignment must be 16 bytes or less");
+static_assert(alignof(SpotLight) <= 16, "SpotLight alignment must be 16 bytes or less");
+static_assert(alignof(LightUBO) <= 16, "LightUBO alignment must be 16 bytes or less");
 
 } // namespace Scene
