@@ -32,6 +32,7 @@
 #include "Resources/ModelLoader.h"
 #include "Resources/Model.h"
 #include "Resources/MaterialInstance.h"
+#include "Resources/EnvironmentMap.h"
 #include "Resources/Vertex.h"
 #include "Resources/UniformBufferObjects.h"
 #include "Scene/Camera.h"
@@ -1047,6 +1048,9 @@ int main()
     // Debug stats
     Renderer::DebugStats stats{};
 
+    // Environment map (HDR)
+    Core::Ref<Resources::EnvironmentMap> environmentMap;
+
     while (!window.ShouldClose())
     {
         // Update frame timing
@@ -1233,6 +1237,29 @@ int main()
                         LOG_ERROR("Failed to load model from file dialog");
                     }
                 }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Load HDR..."))
+            {
+                auto filePath = Platform::FileDialog::OpenHDRFile();
+                if (filePath.has_value())
+                {
+                    auto newEnvMap = Resources::EnvironmentMap::LoadHDR(device, filePath.value(), 512);
+                    if (newEnvMap)
+                    {
+                        environmentMap = newEnvMap;
+                        LOG_INFO("Loaded HDR environment map: {}", filePath.value());
+                    }
+                    else
+                    {
+                        LOG_ERROR("Failed to load HDR environment map");
+                    }
+                }
+            }
+            if (environmentMap)
+            {
+                ImGui::Text("HDR: %s", std::filesystem::path(environmentMap->GetFilePath()).filename().string().c_str());
+                ImGui::Text("Cubemap Size: %u", environmentMap->GetCubemapSize());
             }
             ImGui::End();
         }
@@ -1713,6 +1740,7 @@ int main()
     indexBuffer.reset();
     vertexBuffer.reset();
     loadedModel.reset();
+    environmentMap.reset();
 
     lightManager.reset();
     frameManager.reset();

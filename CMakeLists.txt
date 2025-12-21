@@ -277,6 +277,7 @@ target_link_libraries(RHI PUBLIC Core Platform ${VULKAN_TARGET} GPUOpen::VulkanM
 # Resources library
 set(RESOURCES_SOURCES
     src/Resources/AsyncResourceLoader.cpp
+    src/Resources/EnvironmentMap.cpp
     src/Resources/MaterialInstance.cpp
     src/Resources/ModelLoader.cpp
     src/Resources/ResourceManager.cpp
@@ -285,6 +286,7 @@ set(RESOURCES_SOURCES
 
 set(RESOURCES_HEADERS
     src/Resources/AsyncResourceLoader.h
+    src/Resources/EnvironmentMap.h
     src/Resources/Material.h
     src/Resources/MaterialInstance.h
     src/Resources/Model.h

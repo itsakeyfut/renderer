@@ -219,4 +219,15 @@ namespace Platform
         return OpenFile(config);
     }
 
+    std::optional<std::string> FileDialog::OpenHDRFile()
+    {
+        FileDialogConfig config;
+        config.Title = "Load HDR Environment Map";
+        config.Filters = {
+            {"HDR Files", "*.hdr"},
+            {"All Files", "*.*"}
+        };
+        return OpenFile(config);
+    }
+
 } // namespace Platform
