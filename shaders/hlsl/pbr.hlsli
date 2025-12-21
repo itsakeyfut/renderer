@@ -369,7 +369,8 @@ float3 CalculatePBRDirectComplete(
 
 // Maximum mip level for prefiltered environment map
 // Corresponds to the roughness range 0.0 (mip 0) to 1.0 (max mip)
-static const float MAX_REFLECTION_LOD = 4.0;
+// Value = floor(log2(PrefilteredMapSize)) = floor(log2(128)) = 7
+static const float MAX_REFLECTION_LOD = 7.0;
 
 // Calculate IBL (Image-Based Lighting) contribution
 // Implements the split-sum approximation for real-time IBL
@@ -452,8 +453,9 @@ float3 CalculateIBL(
     float2 brdf = brdfLUT.Sample(linearSampler, float2(NdotV, material.roughness)).rg;
 
     // Combine prefiltered color with BRDF integration
-    // Specular = PrefilterColor * (F0 * scale + bias)
-    float3 specular = prefilteredColor * (F * brdf.x + brdf.y);
+    // Split-sum approximation: Specular = PrefilterColor * (F0 * scale + bias)
+    // Note: Use F0, not F. The BRDF LUT already encodes the Fresnel behavior.
+    float3 specular = prefilteredColor * (F0 * brdf.x + brdf.y);
 
     // -------------------------------------------------------------------------
     // Final Ambient
