@@ -130,8 +130,9 @@ SamplerState prefilteredSampler : register(s6);
 // BRDF LUT for split-sum approximation (Set 3, Binding 2)
 // 2D texture: U = NdotV, V = roughness
 // R = F0 scale, G = F0 bias
+// Note: Using float4 for SPIR-V compatibility, only .rg components are used
 [[vk::binding(2, 3)]] [[vk::combinedImageSampler]]
-Texture2D<float2> brdfLUT : register(t9);
+Texture2D<float4> brdfLUT : register(t9);
 [[vk::binding(2, 3)]] [[vk::combinedImageSampler]]
 SamplerState brdfSampler : register(s7);
 
@@ -320,16 +321,38 @@ float4 main(PSInput input) : SV_TARGET
     // =========================================================================
     // Replace simple hemisphere ambient with full IBL calculation
     // Uses irradiance map for diffuse and prefiltered map + BRDF LUT for specular
-    float3 ambient = CalculateIBL(
-        N,
-        V,
+    // Note: Inlined here because DXC/SPIR-V cannot pass textures as function parameters
+
+    // Calculate F0 (base reflectivity at normal incidence)
+    float3 F0 = lerp(float3(0.04, 0.04, 0.04), material.albedo, material.metallic);
+
+    // NdotV for Fresnel and BRDF LUT lookup
+    float NdotV = max(dot(N, V), 0.0);
+
+    // Fresnel with roughness consideration for IBL
+    float3 F = FresnelSchlickRoughness(NdotV, F0, material.roughness);
+
+    // Energy conservation for diffuse/specular split
+    float3 kS = F;
+    float3 kD = (1.0 - kS) * (1.0 - material.metallic);
+
+    // Diffuse IBL - sample irradiance map using normal
+    float3 irradiance = irradianceMap.Sample(irradianceSampler, N).rgb;
+    float3 diffuseIBL = irradiance * material.albedo;
+
+    // Specular IBL - sample prefiltered environment map using reflection
+    float3 prefilteredColor = prefilteredMap.SampleLevel(
+        prefilteredSampler,
         R,
-        material,
-        irradianceMap,
-        prefilteredMap,
-        brdfLUT,
-        irradianceSampler  // Use the linear sampler for all IBL sampling
-    );
+        material.roughness * MAX_REFLECTION_LOD
+    ).rgb;
+
+    // BRDF LUT lookup for split-sum approximation
+    float2 brdf = brdfLUT.Sample(brdfSampler, float2(NdotV, material.roughness)).rg;
+    float3 specularIBL = prefilteredColor * (F0 * brdf.x + brdf.y);
+
+    // Combine diffuse and specular IBL with AO
+    float3 ambient = (kD * diffuseIBL + specularIBL) * material.ao;
 
     // =========================================================================
     // Final color composition

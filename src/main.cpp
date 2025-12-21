@@ -77,6 +77,52 @@ Core::Ref<RHI::RHITexture> CreateDefaultWhiteTexture(const Core::Ref<RHI::RHIDev
 }
 
 /**
+ * @brief Update IBL descriptor sets with environment map textures.
+ * @param device RHI device
+ * @param descriptorSets Array of descriptor sets to update
+ * @param envMap Environment map with IBL textures (can be nullptr for fallback)
+ * @param sampler IBL sampler
+ * @param fallbackTexture Default texture to use when envMap is nullptr
+ */
+void UpdateIBLDescriptorSets(
+    [[maybe_unused]] const Core::Ref<RHI::RHIDevice>& device,
+    std::array<Core::Ref<RHI::RHIDescriptorSet>, Renderer::MAX_FRAMES_IN_FLIGHT>& descriptorSets,
+    const Core::Ref<Resources::EnvironmentMap>& envMap,
+    const Core::Ref<RHI::RHISampler>& sampler,
+    const Core::Ref<RHI::RHITexture>& fallbackTexture)
+{
+    for (size_t i = 0; i < Renderer::MAX_FRAMES_IN_FLIGHT; ++i)
+    {
+        if (envMap && envMap->HasIrradianceMap() && envMap->HasPrefilteredMap() && envMap->HasBRDFLut())
+        {
+            // Bind actual IBL textures from environment map
+            descriptorSets[i]->UpdateImage(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                envMap->GetIrradianceMapView(), sampler->GetHandle(),
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            descriptorSets[i]->UpdateImage(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                envMap->GetPrefilteredMapView(), sampler->GetHandle(),
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            descriptorSets[i]->UpdateImage(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                envMap->GetBRDFLutView(), sampler->GetHandle(),
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        }
+        else
+        {
+            // Bind fallback textures when no environment map is loaded
+            descriptorSets[i]->UpdateImage(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                fallbackTexture->GetImageView(), sampler->GetHandle(),
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            descriptorSets[i]->UpdateImage(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                fallbackTexture->GetImageView(), sampler->GetHandle(),
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            descriptorSets[i]->UpdateImage(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                fallbackTexture->GetImageView(), sampler->GetHandle(),
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        }
+    }
+}
+
+/**
  * @brief Load textures for a model's materials.
  * @param model The loaded model with MaterialData.
  * @param device RHI device for texture creation.
@@ -607,6 +653,82 @@ int main()
     LOG_INFO("Light manager created with {} point lights", lightManager->GetPointLightCount());
 
     // =========================================================================
+    // IBL Descriptor Set Layout (Set 3)
+    // =========================================================================
+    // Bindings for IBL textures used in model_pbr_ibl.hlsl:
+    // 0: irradianceMap (TextureCube)
+    // 1: prefilteredMap (TextureCube)
+    // 2: brdfLUT (Texture2D)
+    auto iblDescriptorLayout = RHI::RHIDescriptorSetLayout::Create(device, {
+        {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT},
+        {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT},
+        {2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT}
+    });
+    if (!iblDescriptorLayout)
+    {
+        LOG_FATAL("Failed to create IBL descriptor set layout!");
+        return EXIT_FAILURE;
+    }
+
+    // IBL descriptor pool (one set per frame in flight)
+    auto iblDescriptorPool = RHI::RHIDescriptorPool::Create(
+        device,
+        Renderer::MAX_FRAMES_IN_FLIGHT,
+        {
+            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, Renderer::MAX_FRAMES_IN_FLIGHT * 3}
+        });
+
+    if (!iblDescriptorPool)
+    {
+        LOG_FATAL("Failed to create IBL descriptor pool!");
+        return EXIT_FAILURE;
+    }
+
+    // Create IBL descriptor sets (one per frame)
+    std::array<Core::Ref<RHI::RHIDescriptorSet>, Renderer::MAX_FRAMES_IN_FLIGHT> iblDescriptorSets;
+    for (size_t i = 0; i < Renderer::MAX_FRAMES_IN_FLIGHT; ++i)
+    {
+        iblDescriptorSets[i] = RHI::RHIDescriptorSet::Create(device, iblDescriptorPool, iblDescriptorLayout);
+        if (!iblDescriptorSets[i])
+        {
+            LOG_FATAL("Failed to create IBL descriptor set!");
+            return EXIT_FAILURE;
+        }
+    }
+
+    // IBL sampler for cubemaps and BRDF LUT
+    RHI::SamplerDesc iblSamplerDesc;
+    iblSamplerDesc.MagFilter = RHI::FilterMode::Linear;
+    iblSamplerDesc.MinFilter = RHI::FilterMode::Linear;
+    iblSamplerDesc.MipmapMode = RHI::FilterMode::Linear;
+    iblSamplerDesc.AddressModeU = RHI::AddressMode::ClampToEdge;
+    iblSamplerDesc.AddressModeV = RHI::AddressMode::ClampToEdge;
+    iblSamplerDesc.AddressModeW = RHI::AddressMode::ClampToEdge;
+    iblSamplerDesc.MaxLod = 16.0f;
+    iblSamplerDesc.DebugName = "IBL Sampler";
+
+    auto iblSampler = RHI::RHISampler::Create(device, iblSamplerDesc);
+    if (!iblSampler)
+    {
+        LOG_FATAL("Failed to create IBL sampler!");
+        return EXIT_FAILURE;
+    }
+    LOG_INFO("IBL descriptor sets created");
+
+    // Create fallback texture for IBL (will be replaced with actual env map later)
+    auto iblFallbackTexture = CreateDefaultWhiteTexture(device);
+    if (!iblFallbackTexture)
+    {
+        LOG_FATAL("Failed to create IBL fallback texture!");
+        return EXIT_FAILURE;
+    }
+
+    // Initialize IBL descriptor sets with fallback textures
+    // This will be updated when an environment map is loaded
+    UpdateIBLDescriptorSets(device, iblDescriptorSets, nullptr, iblSampler, iblFallbackTexture);
+    LOG_INFO("IBL fallback textures bound");
+
+    // =========================================================================
     // Model Loading
     // =========================================================================
     std::string modelPath = "assets/models/a_contortionist_dancer/scene.gltf";
@@ -936,14 +1058,14 @@ int main()
 
     auto fragmentShader = RHI::RHIShader::CreateFromHLSL(
         device,
-        "shaders/hlsl/pixel/model_pbr.hlsl",
+        "shaders/hlsl/pixel/model_pbr_ibl.hlsl",
         RHI::ShaderStage::Fragment);
     if (!fragmentShader)
     {
         LOG_FATAL("Failed to create fragment shader!");
         return EXIT_FAILURE;
     }
-    LOG_INFO("Fragment shader (PBR) loaded");
+    LOG_INFO("Fragment shader (PBR + IBL) loaded");
 
     // =========================================================================
     // Graphics Pipeline
@@ -980,10 +1102,11 @@ int main()
     pipelineDesc.ColorAttachmentFormats.push_back(swapchain->GetImageFormat());
     pipelineDesc.DepthAttachmentFormat = depthBuffer->GetFormat();
 
-    // Descriptor set layouts: Set 0 = scene data, Set 1 = material data, Set 2 = light data
+    // Descriptor set layouts: Set 0 = scene data, Set 1 = material data, Set 2 = light data, Set 3 = IBL data
     pipelineDesc.DescriptorSetLayouts.push_back(descriptorLayout->GetHandle());
     pipelineDesc.DescriptorSetLayouts.push_back(materialDescriptorLayout->GetHandle());
     pipelineDesc.DescriptorSetLayouts.push_back(lightManager->GetDescriptorSetLayout()->GetHandle());
+    pipelineDesc.DescriptorSetLayouts.push_back(iblDescriptorLayout->GetHandle());
 
     auto pipeline = RHI::RHIPipeline::CreateGraphics(device, pipelineDesc);
     if (!pipeline)
@@ -1065,6 +1188,27 @@ int main()
 
     // Environment map (HDR)
     Core::Ref<Resources::EnvironmentMap> environmentMap;
+
+    // Load default HDR environment map if it exists
+    const std::string defaultHDRPath = "assets/environments/brown_photostudio_02_4k.hdr";
+    if (std::filesystem::exists(defaultHDRPath))
+    {
+        environmentMap = Resources::EnvironmentMap::LoadHDR(device, defaultHDRPath, 512);
+        if (environmentMap)
+        {
+            skyboxRenderer->SetEnvironmentMap(device, environmentMap);
+            UpdateIBLDescriptorSets(device, iblDescriptorSets, environmentMap, iblSampler, iblFallbackTexture);
+            LOG_INFO("Loaded default HDR environment map: {}", defaultHDRPath);
+        }
+        else
+        {
+            LOG_WARN("Failed to load default HDR environment map: {}", defaultHDRPath);
+        }
+    }
+    else
+    {
+        LOG_INFO("Default HDR environment map not found, using fallback: {}", defaultHDRPath);
+    }
 
     while (!window.ShouldClose())
     {
@@ -1264,7 +1408,9 @@ int main()
                     {
                         environmentMap = newEnvMap;
                         skyboxRenderer->SetEnvironmentMap(device, environmentMap);
-                        LOG_INFO("Loaded HDR environment map: {}", filePath.value());
+                        // Update IBL descriptor sets with the new environment map
+                        UpdateIBLDescriptorSets(device, iblDescriptorSets, environmentMap, iblSampler, iblFallbackTexture);
+                        LOG_INFO("Loaded HDR environment map with IBL: {}", filePath.value());
                     }
                     else
                     {
@@ -1624,6 +1770,13 @@ int main()
             2,
             {lightManager->GetDescriptorSet(frameIndex)->GetHandle()});
 
+        // Bind IBL descriptor set (Set 3)
+        cmdBuffer->BindDescriptorSets(
+            VK_PIPELINE_BIND_POINT_GRAPHICS,
+            pipeline->GetLayout(),
+            3,
+            {iblDescriptorSets[frameIndex]->GetHandle()});
+
         cmdBuffer->BindVertexBuffer(vertexBuffer->GetHandle());
         cmdBuffer->BindIndexBuffer(indexBuffer->GetHandle(), VK_INDEX_TYPE_UINT32);
 
@@ -1740,6 +1893,13 @@ int main()
     for (auto& ds : descriptorSets) ds.reset();
     descriptorPool.reset();
     descriptorLayout.reset();
+
+    // IBL system cleanup
+    for (auto& ds : iblDescriptorSets) ds.reset();
+    iblDescriptorPool.reset();
+    iblDescriptorLayout.reset();
+    iblSampler.reset();
+    iblFallbackTexture.reset();
 
     // Material system cleanup
     // Order matters: clear instances first, then fallback, then textures, then pool
