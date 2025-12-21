@@ -161,7 +161,7 @@ float3 CalculateF0(float3 albedo, float metallic)
 //   roughness: Surface roughness
 //   F0: Base reflectivity
 //
-// Returns: Specular BRDF value * NdotL (ready to multiply with light color)
+// Returns: Specular BRDF value (multiply with NdotL and light color for final radiance)
 float3 CookTorranceSpecular(float3 N, float3 V, float3 L, float roughness, float3 F0)
 {
     float3 H = normalize(V + L);
