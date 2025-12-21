@@ -110,12 +110,22 @@ namespace RHI
 
     RHIImage::~RHIImage()
     {
-        if (m_ImageView != VK_NULL_HANDLE && m_Allocator != VK_NULL_HANDLE)
+        if (m_Allocator != VK_NULL_HANDLE)
         {
             VmaAllocatorInfo allocInfo;
             vmaGetAllocatorInfo(m_Allocator, &allocInfo);
-            vkDestroyImageView(allocInfo.device, m_ImageView, nullptr);
-            m_ImageView = VK_NULL_HANDLE;
+
+            if (m_StorageImageView != VK_NULL_HANDLE)
+            {
+                vkDestroyImageView(allocInfo.device, m_StorageImageView, nullptr);
+                m_StorageImageView = VK_NULL_HANDLE;
+            }
+
+            if (m_ImageView != VK_NULL_HANDLE)
+            {
+                vkDestroyImageView(allocInfo.device, m_ImageView, nullptr);
+                m_ImageView = VK_NULL_HANDLE;
+            }
         }
 
         if (m_Image != VK_NULL_HANDLE && m_Allocator != VK_NULL_HANDLE)
@@ -139,6 +149,21 @@ namespace RHI
         m_Format = desc.Format;
         m_Samples = desc.Samples;
         m_Usage = desc.Usage;
+        m_IsCubemap = desc.IsCubemap;
+
+        // Validate cubemap requirements
+        if (m_IsCubemap)
+        {
+            if (m_ArrayLayers != 6)
+            {
+                LOG_ERROR("Cubemap images must have exactly 6 array layers, got {}", m_ArrayLayers);
+                return false;
+            }
+            if (m_Width != m_Height)
+            {
+                LOG_WARN("Cubemap images should have equal width and height for best results");
+            }
+        }
 
         // Calculate mip levels if generating mipmaps
         if (desc.GenerateMipmaps)
@@ -179,6 +204,12 @@ namespace RHI
         imageInfo.samples = m_Samples;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
+        // Add cubemap compatible flag for cubemap images
+        if (m_IsCubemap)
+        {
+            imageInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+        }
+
         VmaAllocationCreateInfo allocInfo{};
         allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
@@ -204,8 +235,25 @@ namespace RHI
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image = m_Image;
-        viewInfo.viewType = m_Depth > 1 ? VK_IMAGE_VIEW_TYPE_3D :
-                            (m_ArrayLayers > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D);
+
+        // Determine image view type based on image configuration
+        if (m_IsCubemap)
+        {
+            viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+        }
+        else if (m_Depth > 1)
+        {
+            viewInfo.viewType = VK_IMAGE_VIEW_TYPE_3D;
+        }
+        else if (m_ArrayLayers > 1)
+        {
+            viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+        }
+        else
+        {
+            viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        }
+
         viewInfo.format = m_Format;
         viewInfo.subresourceRange.aspectMask = GetAspectMask(m_Format);
         viewInfo.subresourceRange.baseMipLevel = 0;
@@ -223,6 +271,27 @@ namespace RHI
         {
             LOG_ERROR("Failed to create image view: VkResult {}", static_cast<int>(result));
             return false;
+        }
+
+        // For cubemaps with Storage usage, create an additional 2D array view
+        // This is required because compute shaders can't use VK_IMAGE_VIEW_TYPE_CUBE
+        // for storage images - they need VK_IMAGE_VIEW_TYPE_2D_ARRAY
+        if (m_IsCubemap && m_Usage == ImageUsage::Storage)
+        {
+            VkImageViewCreateInfo storageViewInfo = viewInfo;
+            storageViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+
+            result = vkCreateImageView(
+                device->GetHandle(),
+                &storageViewInfo,
+                nullptr,
+                &m_StorageImageView);
+
+            if (result != VK_SUCCESS)
+            {
+                LOG_ERROR("Failed to create storage image view: VkResult {}", static_cast<int>(result));
+                return false;
+            }
         }
 
         return true;

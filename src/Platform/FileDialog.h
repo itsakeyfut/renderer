@@ -85,6 +85,14 @@ namespace Platform
          * Convenience method with pre-configured glTF filter.
          */
         static std::optional<std::string> OpenGLTFFile();
+
+        /**
+         * @brief Show a file open dialog for HDR environment maps
+         * @return Selected file path, or std::nullopt if cancelled
+         *
+         * Convenience method with pre-configured HDR filter.
+         */
+        static std::optional<std::string> OpenHDRFile();
     };
 
 } // namespace Platform

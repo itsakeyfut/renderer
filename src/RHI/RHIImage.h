@@ -82,6 +82,14 @@ namespace RHI
         bool GenerateMipmaps = false;
 
         /**
+         * @brief Create as cubemap image
+         *
+         * When true, ArrayLayers must be 6 (one for each face).
+         * Image will be created with VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT.
+         */
+        bool IsCubemap = false;
+
+        /**
          * @brief Debug name for the image
          */
         const char* DebugName = nullptr;
@@ -202,6 +210,17 @@ namespace RHI
         VkImageView GetImageView() const { return m_ImageView; }
 
         /**
+         * @brief Get the storage image view handle
+         *
+         * For cubemap images with Storage usage, this returns a 2D array view
+         * suitable for use as a storage image in compute shaders.
+         * For non-cubemap images, returns the same as GetImageView().
+         *
+         * @return VkImageView handle for storage access
+         */
+        VkImageView GetStorageView() const { return m_StorageImageView != VK_NULL_HANDLE ? m_StorageImageView : m_ImageView; }
+
+        /**
          * @brief Get the image format
          * @return VkFormat
          */
@@ -224,6 +243,18 @@ namespace RHI
          * @return Mip level count
          */
         uint32_t GetMipLevels() const { return m_MipLevels; }
+
+        /**
+         * @brief Get the number of array layers
+         * @return Array layer count
+         */
+        uint32_t GetArrayLayers() const { return m_ArrayLayers; }
+
+        /**
+         * @brief Check if this image is a cubemap
+         * @return true if cubemap, false otherwise
+         */
+        bool IsCubemap() const { return m_IsCubemap; }
 
         /**
          * @brief Get the current image layout
@@ -288,6 +319,7 @@ namespace RHI
         VmaAllocator m_Allocator = VK_NULL_HANDLE;
         VkImage m_Image = VK_NULL_HANDLE;
         VkImageView m_ImageView = VK_NULL_HANDLE;
+        VkImageView m_StorageImageView = VK_NULL_HANDLE;  ///< 2D array view for cubemap storage access
         VmaAllocation m_Allocation = VK_NULL_HANDLE;
 
         VkFormat m_Format = VK_FORMAT_R8G8B8A8_SRGB;
@@ -299,6 +331,7 @@ namespace RHI
         VkSampleCountFlagBits m_Samples = VK_SAMPLE_COUNT_1_BIT;
         ImageUsage m_Usage = ImageUsage::Texture;
         VkImageLayout m_CurrentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        bool m_IsCubemap = false;
     };
 
 } // namespace RHI
