@@ -33,7 +33,8 @@ namespace Resources
  * @brief HDR Environment Map resource
  *
  * Loads HDR equirectangular environment maps and converts them to cubemaps.
- * Supports IBL workflow with cubemap for environment reflections.
+ * Supports IBL workflow with cubemap for environment reflections and
+ * irradiance map for diffuse IBL.
  *
  * Usage:
  * @code
@@ -41,11 +42,12 @@ namespace Resources
  * if (envMap) {
  *     // Use cubemap in shader for IBL
  *     auto cubemap = envMap->GetCubemap();
+ *     // Use irradiance map for diffuse IBL
+ *     auto irradiance = envMap->GetIrradianceMap();
  * }
  * @endcode
  *
  * Future extensions (not yet implemented):
- * - Irradiance map generation for diffuse IBL
  * - Pre-filtered environment map for specular IBL
  * - BRDF LUT generation
  */
@@ -111,6 +113,30 @@ public:
      */
     const std::string& GetFilePath() const { return m_FilePath; }
 
+    /**
+     * @brief Get the irradiance map for diffuse IBL
+     * @return Shared pointer to the irradiance cubemap RHIImage, or nullptr if not generated
+     */
+    const Core::Ref<RHI::RHIImage>& GetIrradianceMap() const { return m_IrradianceMap; }
+
+    /**
+     * @brief Get the irradiance map image view
+     * @return VkImageView handle for the irradiance cubemap, or VK_NULL_HANDLE if not generated
+     */
+    VkImageView GetIrradianceMapView() const;
+
+    /**
+     * @brief Get the irradiance map face size
+     * @return Size in pixels of each irradiance cubemap face
+     */
+    uint32_t GetIrradianceMapSize() const { return m_IrradianceMapSize; }
+
+    /**
+     * @brief Check if irradiance map has been generated
+     * @return true if irradiance map is available
+     */
+    bool HasIrradianceMap() const { return m_IrradianceMap != nullptr; }
+
 private:
     /**
      * @brief Private constructor - use LoadHDR() factory method
@@ -157,6 +183,20 @@ private:
      */
     bool ConvertToCubemap(const Core::Ref<RHI::RHIDevice>& device);
 
+    /**
+     * @brief Create the irradiance cubemap texture
+     * @param device The logical device
+     * @return true on success, false on failure
+     */
+    bool CreateIrradianceMapTexture(const Core::Ref<RHI::RHIDevice>& device);
+
+    /**
+     * @brief Generate irradiance map from cubemap using compute shader
+     * @param device The logical device
+     * @return true on success, false on failure
+     */
+    bool GenerateIrradianceMap(const Core::Ref<RHI::RHIDevice>& device);
+
     // HDR data from file
     std::vector<float> m_HDRData;
     uint32_t m_HDRWidth = 0;
@@ -165,11 +205,13 @@ private:
     // Textures
     Core::Ref<RHI::RHIImage> m_Equirectangular;
     Core::Ref<RHI::RHIImage> m_Cubemap;
+    Core::Ref<RHI::RHIImage> m_IrradianceMap;
     Core::Ref<RHI::RHISampler> m_Sampler;
 
     // Metadata
     std::string m_FilePath;
     uint32_t m_CubemapSize = 512;
+    uint32_t m_IrradianceMapSize = 32;  // Low resolution is sufficient for diffuse IBL
 };
 
 } // namespace Resources
