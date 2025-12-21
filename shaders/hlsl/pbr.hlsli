@@ -364,6 +364,108 @@ float3 CalculatePBRDirectComplete(
 }
 
 // ============================================================================
+// Image-Based Lighting (IBL) Functions
+// ============================================================================
+
+// Maximum mip level for prefiltered environment map
+// Corresponds to the roughness range 0.0 (mip 0) to 1.0 (max mip)
+static const float MAX_REFLECTION_LOD = 4.0;
+
+// Calculate IBL (Image-Based Lighting) contribution
+// Implements the split-sum approximation for real-time IBL
+//
+// The split-sum approximation separates the lighting integral into two parts:
+// 1. Pre-filtered environment map (convolved with GGX for different roughness levels)
+// 2. BRDF integration lookup table (pre-computed Fresnel and geometry terms)
+//
+// This allows us to compute IBL in real-time by combining:
+//   - Diffuse IBL from irradiance map
+//   - Specular IBL from prefiltered map + BRDF LUT
+//
+// Parameters:
+//   N: Surface normal (normalized)
+//   V: View direction (normalized, from surface to camera)
+//   R: Reflection direction (normalized, reflect(-V, N))
+//   material: PBR material properties
+//   irradianceMap: Pre-convolved irradiance cubemap for diffuse IBL
+//   prefilteredMap: Pre-filtered environment map with roughness-based mip levels
+//   brdfLUT: 2D lookup table storing pre-integrated BRDF (scale, bias)
+//   linearSampler: Linear filtering sampler for texture sampling
+//
+// Returns: Ambient lighting contribution from IBL
+//
+// Reference: "Real Shading in Unreal Engine 4" (Brian Karis, SIGGRAPH 2013)
+float3 CalculateIBL(
+    float3 N,
+    float3 V,
+    float3 R,
+    PBRMaterial material,
+    TextureCube<float4> irradianceMap,
+    TextureCube<float4> prefilteredMap,
+    Texture2D<float2> brdfLUT,
+    SamplerState linearSampler)
+{
+    // Calculate F0 (base reflectivity at normal incidence)
+    // Dielectrics: 0.04 (4% reflectance)
+    // Metals: use albedo color (tinted reflections)
+    float3 F0 = lerp(float3(0.04, 0.04, 0.04), material.albedo, material.metallic);
+
+    // NdotV for Fresnel and BRDF LUT lookup
+    float NdotV = max(dot(N, V), 0.0);
+
+    // Fresnel with roughness consideration for IBL
+    // Rougher surfaces have less pronounced Fresnel effect
+    float3 F = FresnelSchlickRoughness(NdotV, F0, material.roughness);
+
+    // Energy conservation for diffuse/specular split
+    // kS = Fresnel term (specular reflection ratio)
+    // kD = 1 - kS (diffuse refraction ratio)
+    float3 kS = F;
+    float3 kD = 1.0 - kS;
+
+    // Metals have no diffuse reflection (all light is reflected or absorbed)
+    kD *= 1.0 - material.metallic;
+
+    // -------------------------------------------------------------------------
+    // Diffuse IBL
+    // -------------------------------------------------------------------------
+    // Sample the irradiance map using the surface normal
+    // The irradiance map contains pre-convolved diffuse lighting from all directions
+    float3 irradiance = irradianceMap.Sample(linearSampler, N).rgb;
+    float3 diffuse = irradiance * material.albedo;
+
+    // -------------------------------------------------------------------------
+    // Specular IBL (Split-Sum Approximation)
+    // -------------------------------------------------------------------------
+    // Sample the prefiltered environment map using the reflection direction
+    // Higher roughness samples from higher mip levels (more blurred)
+    float3 prefilteredColor = prefilteredMap.SampleLevel(
+        linearSampler,
+        R,
+        material.roughness * MAX_REFLECTION_LOD
+    ).rgb;
+
+    // Sample the BRDF LUT to get pre-integrated scale and bias
+    // U = NdotV, V = roughness
+    // R channel = scale factor (1 - Fc) * G_Vis integral
+    // G channel = bias factor Fc * G_Vis integral
+    float2 brdf = brdfLUT.Sample(linearSampler, float2(NdotV, material.roughness)).rg;
+
+    // Combine prefiltered color with BRDF integration
+    // Specular = PrefilterColor * (F0 * scale + bias)
+    float3 specular = prefilteredColor * (F * brdf.x + brdf.y);
+
+    // -------------------------------------------------------------------------
+    // Final Ambient
+    // -------------------------------------------------------------------------
+    // Combine diffuse and specular IBL, apply ambient occlusion
+    // AO is only applied to ambient/IBL lighting (not direct lighting)
+    float3 ambient = (kD * diffuse + specular) * material.ao;
+
+    return ambient;
+}
+
+// ============================================================================
 // Helper Functions
 // ============================================================================
 
