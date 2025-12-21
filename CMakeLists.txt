@@ -500,6 +500,46 @@ if(BUILD_TESTS)
     add_executable(TestMaterialInstance tests/TestMaterialInstance.cpp)
     target_link_libraries(TestMaterialInstance PRIVATE Resources RHI Platform Core glm::glm GTest::gtest_main)
     gtest_discover_tests(TestMaterialInstance)
+
+    # RHI CommandPool test
+    add_executable(TestRHICommandPool tests/TestRHICommandPool.cpp)
+    target_link_libraries(TestRHICommandPool PRIVATE RHI Platform Core GTest::gtest_main)
+    gtest_discover_tests(TestRHICommandPool)
+
+    # RHI Semaphore test
+    add_executable(TestRHISemaphore tests/TestRHISemaphore.cpp)
+    target_link_libraries(TestRHISemaphore PRIVATE RHI Platform Core GTest::gtest_main)
+    gtest_discover_tests(TestRHISemaphore)
+
+    # RHI Fence test
+    add_executable(TestRHIFence tests/TestRHIFence.cpp)
+    target_link_libraries(TestRHIFence PRIVATE RHI Platform Core GTest::gtest_main)
+    gtest_discover_tests(TestRHIFence)
+
+    # RHI Image test
+    add_executable(TestRHIImage tests/TestRHIImage.cpp)
+    target_link_libraries(TestRHIImage PRIVATE RHI Platform Core GTest::gtest_main)
+    gtest_discover_tests(TestRHIImage)
+
+    # ResourceHandle test
+    add_executable(TestResourceHandle tests/TestResourceHandle.cpp)
+    target_link_libraries(TestResourceHandle PRIVATE Resources Core GTest::gtest_main)
+    gtest_discover_tests(TestResourceHandle)
+
+    # TextureLoader test
+    add_executable(TestTextureLoader tests/TestTextureLoader.cpp)
+    target_link_libraries(TestTextureLoader PRIVATE Resources RHI Platform Core GTest::gtest_main)
+    gtest_discover_tests(TestTextureLoader)
+
+    # DepthBuffer test
+    add_executable(TestDepthBuffer tests/TestDepthBuffer.cpp)
+    target_link_libraries(TestDepthBuffer PRIVATE Renderer RHI Platform Core GTest::gtest_main)
+    gtest_discover_tests(TestDepthBuffer)
+
+    # LightManager test
+    add_executable(TestLightManager tests/TestLightManager.cpp)
+    target_link_libraries(TestLightManager PRIVATE Renderer RHI Platform Core glm::glm GTest::gtest_main)
+    gtest_discover_tests(TestLightManager)
 endif()
 
 # =============================================================================
