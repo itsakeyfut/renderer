@@ -356,8 +356,8 @@ float3 CalculatePBRDirectComplete(
     float3 Lo = CalculatePBRDirect(N, V, L, radiance, material);
 
     // Apply ambient with occlusion
-    // Metals have reduced ambient diffuse (they don't have diffuse component)
-    float3 ambient = ambientLight * material.albedo * material.ao * (1.0 - material.metallic * 0.8);
+    // Metals have no diffuse reflection, so ambient diffuse is zero for pure metals
+    float3 ambient = ambientLight * material.albedo * material.ao * (1.0 - material.metallic);
 
     // Combine direct, ambient, and emissive
     return Lo + ambient + material.emissive;

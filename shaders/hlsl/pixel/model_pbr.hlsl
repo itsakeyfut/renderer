@@ -275,9 +275,9 @@ float4 main(PSInput input) : SV_TARGET
     // -------------------------------------------------------------------------
     // Ambient / Environment approximation
     // -------------------------------------------------------------------------
-    // For proper PBR, metals should have reduced ambient diffuse contribution
-    // Use hemisphere ambient with metallic adjustment
-    float3 ambient = CalculateHemisphereAmbient(N, material.albedo, material.ao) * (1.0 - material.metallic * 0.8);
+    // For proper PBR, metals have no diffuse reflection
+    // Ambient diffuse is zero for pure metals (metallic = 1)
+    float3 ambient = CalculateHemisphereAmbient(N, material.albedo, material.ao) * (1.0 - material.metallic);
 
     // Apply AO to all non-emissive lighting (not just ambient)
     lighting *= lerp(1.0, material.ao, 0.5); // Partial AO influence on direct lighting
