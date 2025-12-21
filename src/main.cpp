@@ -28,6 +28,7 @@
 #include "Renderer/DepthBuffer.h"
 #include "Renderer/FrameManager.h"
 #include "Renderer/LightManager.h"
+#include "Renderer/SkyboxRenderer.h"
 #include "Renderer/Debug/ImGuiRenderer.h"
 #include "Resources/ModelLoader.h"
 #include "Resources/Model.h"
@@ -1011,6 +1012,20 @@ int main()
     LOG_INFO("ImGui renderer created");
 
     // =========================================================================
+    // Skybox Renderer
+    // =========================================================================
+    auto skyboxRenderer = Renderer::SkyboxRenderer::Create(
+        device,
+        swapchain->GetImageFormat(),
+        VK_FORMAT_D32_SFLOAT);
+    if (!skyboxRenderer)
+    {
+        LOG_FATAL("Failed to create skybox renderer!");
+        return EXIT_FAILURE;
+    }
+    LOG_INFO("Skybox renderer created");
+
+    // =========================================================================
     // Main Loop
     // =========================================================================
     LOG_INFO("Entering main loop...");
@@ -1248,6 +1263,7 @@ int main()
                     if (newEnvMap)
                     {
                         environmentMap = newEnvMap;
+                        skyboxRenderer->SetEnvironmentMap(device, environmentMap);
                         LOG_INFO("Loaded HDR environment map: {}", filePath.value());
                     }
                     else
@@ -1644,6 +1660,9 @@ int main()
             cmdBuffer->DrawIndexed(drawInfo.IndexCount, 1, drawInfo.IndexOffset, 0, 0);
         }
 
+        // Render skybox (drawn last but appears behind scene due to depth test)
+        skyboxRenderer->Render(cmdBuffer, camera.GetViewMatrix(), camera.GetProjectionMatrix());
+
         cmdBuffer->EndRendering();
 
         // Render ImGui
@@ -1710,6 +1729,7 @@ int main()
     device->WaitIdle();
 
     imguiRenderer.reset();
+    skyboxRenderer.reset();
     pipeline.reset();
 
     pipelineDesc.VertexShader.reset();
