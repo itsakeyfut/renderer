@@ -1,5 +1,5 @@
 // Model Pixel (Fragment) Shader - PBR Textured Version
-// Blinn-Phong shading with texture support and dynamic lighting
+// Cook-Torrance BRDF with GGX distribution, texture support and dynamic lighting
 //
 // Descriptor Set Layout:
 //   Set 0: Scene data
@@ -19,6 +19,7 @@
 //     - binding 2: SpotLight storage buffer
 
 #include "../lights.hlsli"
+#include "../pbr.hlsli"
 
 // Camera uniform buffer (Set 0, Binding 0)
 [[vk::binding(0, 0)]]
@@ -188,7 +189,7 @@ float4 main(PSInput input) : SV_TARGET
     }
 
     // =========================================================================
-    // Lighting calculation
+    // Lighting calculation (Cook-Torrance BRDF with GGX)
     // =========================================================================
 
     // Get world space normal (with normal mapping if available)
@@ -197,13 +198,8 @@ float4 main(PSInput input) : SV_TARGET
     // View direction (from surface to camera)
     float3 V = normalize(cameraPosition - input.WorldPos);
 
-    // Calculate shininess from roughness
-    float shininess = RoughnessToShininess(roughness);
-
-    // Metallic workflow: metals have no diffuse, dielectrics have full diffuse
-    // Specular color: metals use albedo, dielectrics use 0.04 (4% reflectance)
-    float3 diffuseColor = albedo * (1.0 - metallic);
-    float3 specularColor = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
+    // Clamp roughness to avoid numerical issues
+    roughness = ClampRoughness(roughness);
 
     // Accumulated lighting from all sources
     float3 lighting = float3(0.0, 0.0, 0.0);
@@ -212,23 +208,11 @@ float4 main(PSInput input) : SV_TARGET
     // Directional light (from LightUBO)
     // -------------------------------------------------------------------------
     {
-        float3 lightDir = normalize(-directionalLight.Direction);
-        float3 lightColor = directionalLight.Color * directionalLight.Intensity;
+        float3 L = normalize(-directionalLight.Direction);
+        float3 lightRadiance = directionalLight.Color * directionalLight.Intensity;
 
-        // Diffuse (Lambertian)
-        float NdotL = max(dot(N, lightDir), 0.0);
-        float3 diffuse = NdotL * lightColor * diffuseColor;
-
-        // Specular (Blinn-Phong)
-        float3 specular = float3(0.0, 0.0, 0.0);
-        if (NdotL > 0.0)
-        {
-            float3 halfDir = normalize(lightDir + V);
-            float NdotH = max(dot(N, halfDir), 0.0);
-            specular = pow(NdotH, shininess) * lightColor * specularColor;
-        }
-
-        lighting += diffuse + specular;
+        // Calculate PBR lighting using Cook-Torrance BRDF
+        lighting += CalculatePBRLighting(N, V, L, albedo, metallic, roughness, lightRadiance);
     }
 
     // -------------------------------------------------------------------------
@@ -241,26 +225,14 @@ float4 main(PSInput input) : SV_TARGET
         // Calculate light direction and distance
         float3 lightVec = light.Position - input.WorldPos;
         float distance = length(lightVec);
-        float3 lightDir = lightVec / distance;
+        float3 L = lightVec / distance;
 
-        // Attenuation
+        // Attenuation (inverse square law with smooth falloff)
         float attenuation = CalculateAttenuation(distance, light.Radius);
-        float3 lightColor = light.Color * light.Intensity * attenuation;
+        float3 lightRadiance = light.Color * light.Intensity * attenuation;
 
-        // Diffuse (Lambertian)
-        float NdotL = max(dot(N, lightDir), 0.0);
-        float3 diffuse = NdotL * lightColor * diffuseColor;
-
-        // Specular (Blinn-Phong)
-        float3 specular = float3(0.0, 0.0, 0.0);
-        if (NdotL > 0.0)
-        {
-            float3 halfDir = normalize(lightDir + V);
-            float NdotH = max(dot(N, halfDir), 0.0);
-            specular = pow(NdotH, shininess) * lightColor * specularColor;
-        }
-
-        lighting += diffuse + specular;
+        // Calculate PBR lighting using Cook-Torrance BRDF
+        lighting += CalculatePBRLighting(N, V, L, albedo, metallic, roughness, lightRadiance);
     }
 
     // -------------------------------------------------------------------------
@@ -273,7 +245,7 @@ float4 main(PSInput input) : SV_TARGET
         // Calculate light direction and distance
         float3 lightVec = light.Position - input.WorldPos;
         float distance = length(lightVec);
-        float3 lightDir = lightVec / distance;
+        float3 L = lightVec / distance;
 
         // Distance attenuation
         float radius = 50.0; // Default radius for spot lights
@@ -281,38 +253,23 @@ float4 main(PSInput input) : SV_TARGET
 
         // Spot cone attenuation
         float spotAttenuation = CalculateSpotAttenuation(
-            lightDir,
+            L,
             normalize(light.Direction),
             light.InnerConeAngle,
             light.OuterConeAngle);
 
-        float3 lightColor = light.Color * light.Intensity * distanceAttenuation * spotAttenuation;
+        float3 lightRadiance = light.Color * light.Intensity * distanceAttenuation * spotAttenuation;
 
-        // Diffuse (Lambertian)
-        float NdotL = max(dot(N, lightDir), 0.0);
-        float3 diffuse = NdotL * lightColor * diffuseColor;
-
-        // Specular (Blinn-Phong)
-        float3 specular = float3(0.0, 0.0, 0.0);
-        if (NdotL > 0.0)
-        {
-            float3 halfDir = normalize(lightDir + V);
-            float NdotH = max(dot(N, halfDir), 0.0);
-            specular = pow(NdotH, shininess) * lightColor * specularColor;
-        }
-
-        lighting += diffuse + specular;
+        // Calculate PBR lighting using Cook-Torrance BRDF
+        lighting += CalculatePBRLighting(N, V, L, albedo, metallic, roughness, lightRadiance);
     }
 
     // -------------------------------------------------------------------------
     // Ambient / Environment approximation
     // -------------------------------------------------------------------------
-    // Simple hemisphere ambient: blend between ground color and sky color
-    float3 skyColor = float3(0.15, 0.18, 0.25);   // Cool sky ambient
-    float3 groundColor = float3(0.08, 0.06, 0.04); // Warm ground bounce
-    float upFactor = N.y * 0.5 + 0.5; // Map -1..1 to 0..1
-    float3 ambientColor = lerp(groundColor, skyColor, upFactor);
-    float3 ambient = ambientColor * diffuseColor * ao;
+    // For proper PBR, metals should have reduced ambient diffuse contribution
+    // Use hemisphere ambient with metallic adjustment
+    float3 ambient = CalculateHemisphereAmbient(N, albedo, ao) * (1.0 - metallic * 0.8);
 
     // Apply AO to all non-emissive lighting (not just ambient)
     lighting *= lerp(1.0, ao, 0.5); // Partial AO influence on direct lighting
