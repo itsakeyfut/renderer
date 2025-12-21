@@ -444,7 +444,12 @@ bool EnvironmentMap::ConvertToCubemap(const Core::Ref<RHI::RHIDevice>& device)
         return false;
     }
 
-    vkQueueWaitIdle(device->GetGraphicsQueue());
+    result = vkQueueWaitIdle(device->GetGraphicsQueue());
+    if (result != VK_SUCCESS)
+    {
+        LOG_ERROR("Failed to wait for compute queue: VkResult {}", static_cast<int>(result));
+        return false;
+    }
 
     // Update cubemap layout tracking
     m_Cubemap->SetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
