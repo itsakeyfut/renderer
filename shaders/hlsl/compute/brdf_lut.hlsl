@@ -14,7 +14,9 @@
 #define PI 3.14159265359
 
 // Output BRDF LUT (2D texture, not cubemap)
-[[vk::binding(0, 0)]] RWTexture2D<float2> BRDFLut : register(u0);
+// Explicit format specification to match VK_FORMAT_R16G16_SFLOAT
+[[vk::binding(0, 0)]] [[vk::image_format("rg16f")]]
+RWTexture2D<float2> BRDFLut : register(u0);
 
 // Push constants for BRDF LUT size
 [[vk::push_constant]]
