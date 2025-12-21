@@ -44,11 +44,12 @@ namespace Resources
  *     auto cubemap = envMap->GetCubemap();
  *     // Use irradiance map for diffuse IBL
  *     auto irradiance = envMap->GetIrradianceMap();
+ *     // Use prefiltered map for specular IBL
+ *     auto prefiltered = envMap->GetPrefilteredMap();
  * }
  * @endcode
  *
  * Future extensions (not yet implemented):
- * - Pre-filtered environment map for specular IBL
  * - BRDF LUT generation
  */
 class EnvironmentMap
@@ -137,6 +138,40 @@ public:
      */
     bool HasIrradianceMap() const { return m_IrradianceMap != nullptr; }
 
+    /**
+     * @brief Get the prefiltered environment map for specular IBL
+     * @return Shared pointer to the prefiltered cubemap RHIImage, or nullptr if not generated
+     *
+     * The prefiltered map stores convolved environment data at different roughness levels.
+     * Mip level 0 = roughness 0 (mirror reflection)
+     * Higher mip levels = increasing roughness (more diffuse)
+     */
+    const Core::Ref<RHI::RHIImage>& GetPrefilteredMap() const { return m_PrefilteredMap; }
+
+    /**
+     * @brief Get the prefiltered map image view
+     * @return VkImageView handle for the prefiltered cubemap, or VK_NULL_HANDLE if not generated
+     */
+    VkImageView GetPrefilteredMapView() const;
+
+    /**
+     * @brief Get the prefiltered map base size
+     * @return Size in pixels of the largest mip level (mip 0)
+     */
+    uint32_t GetPrefilteredMapSize() const { return m_PrefilteredMapSize; }
+
+    /**
+     * @brief Get the number of mip levels in the prefiltered map
+     * @return Number of mip levels (each corresponds to different roughness)
+     */
+    uint32_t GetPrefilteredMapMipLevels() const { return m_PrefilteredMipLevels; }
+
+    /**
+     * @brief Check if prefiltered map has been generated
+     * @return true if prefiltered map is available
+     */
+    bool HasPrefilteredMap() const { return m_PrefilteredMap != nullptr; }
+
 private:
     /**
      * @brief Private constructor - use LoadHDR() factory method
@@ -197,6 +232,24 @@ private:
      */
     bool GenerateIrradianceMap(const Core::Ref<RHI::RHIDevice>& device);
 
+    /**
+     * @brief Create the prefiltered cubemap texture with mip levels
+     * @param device The logical device
+     * @return true on success, false on failure
+     */
+    bool CreatePrefilteredMapTexture(const Core::Ref<RHI::RHIDevice>& device);
+
+    /**
+     * @brief Generate prefiltered map from cubemap using compute shader
+     *
+     * Processes each mip level with corresponding roughness value.
+     * Uses importance sampling with GGX distribution.
+     *
+     * @param device The logical device
+     * @return true on success, false on failure
+     */
+    bool GeneratePrefilteredMap(const Core::Ref<RHI::RHIDevice>& device);
+
     // HDR data from file
     std::vector<float> m_HDRData;
     uint32_t m_HDRWidth = 0;
@@ -206,12 +259,15 @@ private:
     Core::Ref<RHI::RHIImage> m_Equirectangular;
     Core::Ref<RHI::RHIImage> m_Cubemap;
     Core::Ref<RHI::RHIImage> m_IrradianceMap;
+    Core::Ref<RHI::RHIImage> m_PrefilteredMap;
     Core::Ref<RHI::RHISampler> m_Sampler;
 
     // Metadata
     std::string m_FilePath;
     uint32_t m_CubemapSize = 512;
-    uint32_t m_IrradianceMapSize = 32;  // Low resolution is sufficient for diffuse IBL
+    uint32_t m_IrradianceMapSize = 32;   // Low resolution is sufficient for diffuse IBL
+    uint32_t m_PrefilteredMapSize = 128; // Base size for prefiltered map
+    uint32_t m_PrefilteredMipLevels = 5; // Mip levels for roughness sampling (0.0 to 1.0)
 };
 
 } // namespace Resources
