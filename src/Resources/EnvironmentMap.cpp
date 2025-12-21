@@ -62,6 +62,7 @@ Core::Ref<EnvironmentMap> EnvironmentMap::LoadHDR(
 
 EnvironmentMap::~EnvironmentMap()
 {
+    m_BRDFLut.reset();
     m_PrefilteredMap.reset();
     m_IrradianceMap.reset();
     m_Cubemap.reset();
@@ -82,6 +83,11 @@ VkImageView EnvironmentMap::GetIrradianceMapView() const
 VkImageView EnvironmentMap::GetPrefilteredMapView() const
 {
     return m_PrefilteredMap ? m_PrefilteredMap->GetImageView() : VK_NULL_HANDLE;
+}
+
+VkImageView EnvironmentMap::GetBRDFLutView() const
+{
+    return m_BRDFLut ? m_BRDFLut->GetImageView() : VK_NULL_HANDLE;
 }
 
 bool EnvironmentMap::Initialize(
@@ -136,6 +142,18 @@ bool EnvironmentMap::Initialize(
 
     // Generate prefiltered map for specular IBL
     if (!GeneratePrefilteredMap(device))
+    {
+        return false;
+    }
+
+    // Create BRDF LUT texture
+    if (!CreateBRDFLutTexture(device))
+    {
+        return false;
+    }
+
+    // Generate BRDF LUT for split-sum approximation
+    if (!GenerateBRDFLut(device))
     {
         return false;
     }
@@ -1065,6 +1083,233 @@ bool EnvironmentMap::GeneratePrefilteredMap(const Core::Ref<RHI::RHIDevice>& dev
     m_PrefilteredMap->SetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     LOG_DEBUG("Generated prefiltered environment map for specular IBL ({} mip levels)", m_PrefilteredMipLevels);
+    return true;
+}
+
+bool EnvironmentMap::CreateBRDFLutTexture(const Core::Ref<RHI::RHIDevice>& device)
+{
+    // Create BRDF LUT texture (2D, not cubemap)
+    // 512x512 provides sufficient quality for IBL
+    RHI::ImageDesc desc;
+    desc.Width = m_BRDFLutSize;
+    desc.Height = m_BRDFLutSize;
+    desc.ArrayLayers = 1;  // Single 2D texture, not cubemap
+    desc.Format = VK_FORMAT_R16G16_SFLOAT;  // 16-bit float for scale and bias factors
+    desc.Usage = RHI::ImageUsage::Storage;  // Storage for compute shader write
+    desc.IsCubemap = false;
+    desc.DebugName = "BRDF_LUT";
+
+    m_BRDFLut = RHI::RHIImage::Create(device, desc);
+    if (!m_BRDFLut)
+    {
+        LOG_ERROR("Failed to create BRDF LUT texture");
+        return false;
+    }
+
+    LOG_DEBUG("Created BRDF LUT texture: {}x{}", m_BRDFLutSize, m_BRDFLutSize);
+    return true;
+}
+
+bool EnvironmentMap::GenerateBRDFLut(const Core::Ref<RHI::RHIDevice>& device)
+{
+    // Load compute shader for BRDF LUT generation
+    RHI::ShaderCompileConfig shaderConfig;
+    shaderConfig.EntryPoint = "main";
+    shaderConfig.IncludeDirs.push_back("shaders/hlsl");
+
+    auto computeShader = RHI::RHIShader::CreateFromHLSL(
+        device,
+        "shaders/hlsl/compute/brdf_lut.hlsl",
+        RHI::ShaderStage::Compute,
+        shaderConfig);
+
+    if (!computeShader)
+    {
+        LOG_ERROR("Failed to compile brdf_lut compute shader");
+        return false;
+    }
+
+    // Create descriptor set layout
+    // Binding 0: Output BRDF LUT (storage image)
+    // Note: No input textures needed - BRDF LUT is computed independently
+    std::vector<RHI::DescriptorBinding> bindings = {
+        {0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}
+    };
+
+    auto descriptorLayout = RHI::RHIDescriptorSetLayout::Create(device, bindings);
+    if (!descriptorLayout)
+    {
+        LOG_ERROR("Failed to create descriptor set layout for BRDF LUT");
+        return false;
+    }
+
+    // Create descriptor pool
+    RHI::DescriptorPoolDesc poolDesc;
+    poolDesc.MaxSets = 1;
+    poolDesc.PoolSizes = {
+        {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1}
+    };
+
+    auto descriptorPool = RHI::RHIDescriptorPool::Create(device, poolDesc);
+    if (!descriptorPool)
+    {
+        LOG_ERROR("Failed to create descriptor pool for BRDF LUT");
+        return false;
+    }
+
+    // Create descriptor set
+    auto descriptorSet = RHI::RHIDescriptorSet::Create(device, descriptorPool, descriptorLayout);
+    if (!descriptorSet)
+    {
+        LOG_ERROR("Failed to create descriptor set for BRDF LUT");
+        return false;
+    }
+
+    // Update descriptor set with output storage image
+    // Use GetStorageView() for compute shader storage access
+    descriptorSet->UpdateImage(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+        m_BRDFLut->GetStorageView(), VK_NULL_HANDLE,
+        VK_IMAGE_LAYOUT_GENERAL);
+
+    // Push constant for BRDF LUT size
+    struct PushConstants
+    {
+        uint32_t LutSize;
+    };
+
+    VkPushConstantRange pushConstantRange{};
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    pushConstantRange.offset = 0;
+    pushConstantRange.size = sizeof(PushConstants);
+
+    // Create compute pipeline
+    auto computePipeline = RHI::RHIPipeline::CreateCompute(
+        device,
+        computeShader,
+        {descriptorLayout->GetHandle()},
+        {pushConstantRange});
+
+    if (!computePipeline)
+    {
+        LOG_ERROR("Failed to create compute pipeline for BRDF LUT");
+        return false;
+    }
+
+    // Create command pool and buffer
+    RHI::RHICommandPoolConfig poolConfig;
+    poolConfig.QueueType = RHI::CommandPoolQueueType::Graphics;  // Use graphics queue for compute
+    poolConfig.Transient = true;
+
+    auto commandPool = RHI::RHICommandPool::Create(device, poolConfig);
+    if (!commandPool)
+    {
+        LOG_ERROR("Failed to create command pool for BRDF LUT");
+        return false;
+    }
+
+    auto commandBuffer = RHI::RHICommandBuffer::Create(device, commandPool);
+    if (!commandBuffer)
+    {
+        LOG_ERROR("Failed to create command buffer for BRDF LUT");
+        return false;
+    }
+
+    // Record compute dispatch
+    commandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+
+    // Transition BRDF LUT to GENERAL layout for compute write
+    VkImageMemoryBarrier barrierToGeneral{};
+    barrierToGeneral.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrierToGeneral.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    barrierToGeneral.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    barrierToGeneral.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrierToGeneral.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrierToGeneral.image = m_BRDFLut->GetHandle();
+    barrierToGeneral.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrierToGeneral.subresourceRange.baseMipLevel = 0;
+    barrierToGeneral.subresourceRange.levelCount = 1;
+    barrierToGeneral.subresourceRange.baseArrayLayer = 0;
+    barrierToGeneral.subresourceRange.layerCount = 1;  // Single 2D texture
+    barrierToGeneral.srcAccessMask = 0;
+    barrierToGeneral.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+
+    commandBuffer->PipelineBarrier(
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        {}, {}, {barrierToGeneral});
+
+    // Bind pipeline and descriptor set
+    commandBuffer->BindPipeline(VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline->GetHandle());
+    commandBuffer->BindDescriptorSets(
+        VK_PIPELINE_BIND_POINT_COMPUTE,
+        computePipeline->GetLayout(),
+        0,
+        {descriptorSet->GetHandle()});
+
+    // Push constants
+    PushConstants pushConstants{m_BRDFLutSize};
+    commandBuffer->PushConstants(
+        computePipeline->GetLayout(),
+        VK_SHADER_STAGE_COMPUTE_BIT,
+        0,
+        sizeof(PushConstants),
+        &pushConstants);
+
+    // Dispatch compute shader (16x16 work groups)
+    // For 512x512: 32x32 work groups
+    uint32_t groupCountX = (m_BRDFLutSize + 15) / 16;
+    uint32_t groupCountY = (m_BRDFLutSize + 15) / 16;
+    uint32_t groupCountZ = 1;  // Single 2D texture, not array
+    commandBuffer->Dispatch(groupCountX, groupCountY, groupCountZ);
+
+    // Transition BRDF LUT to SHADER_READ_ONLY for sampling
+    VkImageMemoryBarrier barrierToRead{};
+    barrierToRead.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrierToRead.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+    barrierToRead.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barrierToRead.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrierToRead.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrierToRead.image = m_BRDFLut->GetHandle();
+    barrierToRead.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrierToRead.subresourceRange.baseMipLevel = 0;
+    barrierToRead.subresourceRange.levelCount = 1;
+    barrierToRead.subresourceRange.baseArrayLayer = 0;
+    barrierToRead.subresourceRange.layerCount = 1;  // Single 2D texture
+    barrierToRead.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    barrierToRead.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    commandBuffer->PipelineBarrier(
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        {}, {}, {barrierToRead});
+
+    commandBuffer->End();
+
+    // Submit and wait
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    VkCommandBuffer cmdHandle = commandBuffer->GetHandle();
+    submitInfo.pCommandBuffers = &cmdHandle;
+
+    VkResult result = vkQueueSubmit(device->GetGraphicsQueue(), 1, &submitInfo, VK_NULL_HANDLE);
+    if (result != VK_SUCCESS)
+    {
+        LOG_ERROR("Failed to submit BRDF LUT compute command: VkResult {}", static_cast<int>(result));
+        return false;
+    }
+
+    result = vkQueueWaitIdle(device->GetGraphicsQueue());
+    if (result != VK_SUCCESS)
+    {
+        LOG_ERROR("Failed to wait for BRDF LUT compute queue: VkResult {}", static_cast<int>(result));
+        return false;
+    }
+
+    // Update BRDF LUT layout tracking
+    m_BRDFLut->SetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    LOG_DEBUG("Generated BRDF LUT for split-sum approximation ({}x{})", m_BRDFLutSize, m_BRDFLutSize);
     return true;
 }
 

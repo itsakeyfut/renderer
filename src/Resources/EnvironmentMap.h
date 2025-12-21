@@ -46,11 +46,10 @@ namespace Resources
  *     auto irradiance = envMap->GetIrradianceMap();
  *     // Use prefiltered map for specular IBL
  *     auto prefiltered = envMap->GetPrefilteredMap();
+ *     // Use BRDF LUT for split-sum approximation
+ *     auto brdfLut = envMap->GetBRDFLut();
  * }
  * @endcode
- *
- * Future extensions (not yet implemented):
- * - BRDF LUT generation
  */
 class EnvironmentMap
 {
@@ -172,6 +171,38 @@ public:
      */
     bool HasPrefilteredMap() const { return m_PrefilteredMap != nullptr; }
 
+    /**
+     * @brief Get the BRDF LUT for split-sum approximation
+     * @return Shared pointer to the BRDF LUT RHIImage, or nullptr if not generated
+     *
+     * The BRDF LUT is a 2D texture storing pre-integrated BRDF values:
+     * - U axis: NdotV (view angle, 0.0 to 1.0)
+     * - V axis: roughness (0.0 to 1.0)
+     * - R channel: F0 scale factor
+     * - G channel: F0 bias factor
+     *
+     * Used in the split-sum approximation: Specular = Prefiltered * (F0 * scale + bias)
+     */
+    const Core::Ref<RHI::RHIImage>& GetBRDFLut() const { return m_BRDFLut; }
+
+    /**
+     * @brief Get the BRDF LUT image view
+     * @return VkImageView handle for the BRDF LUT, or VK_NULL_HANDLE if not generated
+     */
+    VkImageView GetBRDFLutView() const;
+
+    /**
+     * @brief Get the BRDF LUT size
+     * @return Size in pixels (square texture)
+     */
+    uint32_t GetBRDFLutSize() const { return m_BRDFLutSize; }
+
+    /**
+     * @brief Check if BRDF LUT has been generated
+     * @return true if BRDF LUT is available
+     */
+    bool HasBRDFLut() const { return m_BRDFLut != nullptr; }
+
 private:
     /**
      * @brief Private constructor - use LoadHDR() factory method
@@ -250,6 +281,24 @@ private:
      */
     bool GeneratePrefilteredMap(const Core::Ref<RHI::RHIDevice>& device);
 
+    /**
+     * @brief Create the BRDF LUT texture
+     * @param device The logical device
+     * @return true on success, false on failure
+     */
+    bool CreateBRDFLutTexture(const Core::Ref<RHI::RHIDevice>& device);
+
+    /**
+     * @brief Generate BRDF LUT using compute shader
+     *
+     * Pre-integrates the BRDF for the split-sum approximation.
+     * Stores F0 scale and bias factors for different NdotV and roughness values.
+     *
+     * @param device The logical device
+     * @return true on success, false on failure
+     */
+    bool GenerateBRDFLut(const Core::Ref<RHI::RHIDevice>& device);
+
     // HDR data from file
     std::vector<float> m_HDRData;
     uint32_t m_HDRWidth = 0;
@@ -260,6 +309,7 @@ private:
     Core::Ref<RHI::RHIImage> m_Cubemap;
     Core::Ref<RHI::RHIImage> m_IrradianceMap;
     Core::Ref<RHI::RHIImage> m_PrefilteredMap;
+    Core::Ref<RHI::RHIImage> m_BRDFLut;
     Core::Ref<RHI::RHISampler> m_Sampler;
 
     // Metadata
@@ -268,6 +318,7 @@ private:
     uint32_t m_IrradianceMapSize = 32;   // Low resolution is sufficient for diffuse IBL
     uint32_t m_PrefilteredMapSize = 128; // Base size for prefiltered map
     uint32_t m_PrefilteredMipLevels = 5; // Mip levels for roughness sampling (0.0 to 1.0)
+    uint32_t m_BRDFLutSize = 512;        // 512x512 is sufficient for BRDF LUT
 };
 
 } // namespace Resources
