@@ -1224,7 +1224,6 @@ int main()
     float cameraSpeed = 2.0f;
     float mouseSensitivity = 0.1f;
     bool mouseCaptured = false;
-    float rotationAngle = 0.0f;
 
     // Debug stats
     Renderer::DebugStats stats{};
@@ -1329,9 +1328,6 @@ int main()
             camera.SetRotation(pitch, yaw);
         }
 
-        // Auto-rotate model
-        rotationAngle += deltaTime * 30.0f;
-
         // Handle window minimization
         window.GetFramebufferSize(fbWidth, fbHeight);
         if (fbWidth == 0 || fbHeight == 0)
@@ -1389,11 +1385,7 @@ int main()
         cameraUBOs[frameIndex]->SetData(&cameraData, sizeof(cameraData));
 
         Resources::ObjectUBO objectData;
-        // First rotate around X axis by 0 degrees to stand the model upright,
-        // then apply Y-axis auto-rotation
-        glm::mat4 standUpright = glm::rotate(glm::mat4(1.0f), glm::radians(0.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-        glm::mat4 autoRotate = glm::rotate(glm::mat4(1.0f), glm::radians(rotationAngle), glm::vec3(0.0f, 1.0f, 0.0f));
-        objectData.Model = autoRotate * standUpright;
+        objectData.Model = glm::mat4(1.0f);
         objectData.NormalMatrix = glm::transpose(glm::inverse(objectData.Model));
         objectUBOs[frameIndex]->SetData(&objectData, sizeof(objectData));
 
