@@ -201,7 +201,15 @@ float4 main(PSInput input) : SV_TARGET
     // Clamp roughness to avoid numerical issues
     roughness = ClampRoughness(roughness);
 
-    // Accumulated lighting from all sources
+    // Create PBRMaterial struct for Metallic-Roughness Workflow
+    PBRMaterial material;
+    material.albedo = albedo;
+    material.metallic = metallic;
+    material.roughness = roughness;
+    material.ao = ao;
+    material.emissive = emissive;
+
+    // Accumulated direct lighting from all sources
     float3 lighting = float3(0.0, 0.0, 0.0);
 
     // -------------------------------------------------------------------------
@@ -209,10 +217,10 @@ float4 main(PSInput input) : SV_TARGET
     // -------------------------------------------------------------------------
     {
         float3 L = normalize(-directionalLight.Direction);
-        float3 lightRadiance = directionalLight.Color * directionalLight.Intensity;
+        float3 radiance = directionalLight.Color * directionalLight.Intensity;
 
-        // Calculate PBR lighting using Cook-Torrance BRDF
-        lighting += CalculatePBRLighting(N, V, L, albedo, metallic, roughness, lightRadiance);
+        // Calculate PBR direct lighting using Cook-Torrance BRDF
+        lighting += CalculatePBRDirect(N, V, L, radiance, material);
     }
 
     // -------------------------------------------------------------------------
@@ -229,10 +237,10 @@ float4 main(PSInput input) : SV_TARGET
 
         // Attenuation (inverse square law with smooth falloff)
         float attenuation = CalculateAttenuation(distance, light.Radius);
-        float3 lightRadiance = light.Color * light.Intensity * attenuation;
+        float3 radiance = light.Color * light.Intensity * attenuation;
 
-        // Calculate PBR lighting using Cook-Torrance BRDF
-        lighting += CalculatePBRLighting(N, V, L, albedo, metallic, roughness, lightRadiance);
+        // Calculate PBR direct lighting using Cook-Torrance BRDF
+        lighting += CalculatePBRDirect(N, V, L, radiance, material);
     }
 
     // -------------------------------------------------------------------------
@@ -258,27 +266,27 @@ float4 main(PSInput input) : SV_TARGET
             light.InnerConeAngle,
             light.OuterConeAngle);
 
-        float3 lightRadiance = light.Color * light.Intensity * distanceAttenuation * spotAttenuation;
+        float3 radiance = light.Color * light.Intensity * distanceAttenuation * spotAttenuation;
 
-        // Calculate PBR lighting using Cook-Torrance BRDF
-        lighting += CalculatePBRLighting(N, V, L, albedo, metallic, roughness, lightRadiance);
+        // Calculate PBR direct lighting using Cook-Torrance BRDF
+        lighting += CalculatePBRDirect(N, V, L, radiance, material);
     }
 
     // -------------------------------------------------------------------------
     // Ambient / Environment approximation
     // -------------------------------------------------------------------------
-    // For proper PBR, metals should have reduced ambient diffuse contribution
-    // Use hemisphere ambient with metallic adjustment
-    float3 ambient = CalculateHemisphereAmbient(N, albedo, ao) * (1.0 - metallic * 0.8);
+    // For proper PBR, metals have no diffuse reflection
+    // Ambient diffuse is zero for pure metals (metallic = 1)
+    float3 ambient = CalculateHemisphereAmbient(N, material.albedo, material.ao) * (1.0 - material.metallic);
 
     // Apply AO to all non-emissive lighting (not just ambient)
-    lighting *= lerp(1.0, ao, 0.5); // Partial AO influence on direct lighting
+    lighting *= lerp(1.0, material.ao, 0.5); // Partial AO influence on direct lighting
 
     // =========================================================================
     // Final color composition
     // =========================================================================
 
-    float3 color = ambient + lighting + emissive;
+    float3 color = ambient + lighting + material.emissive;
 
     return float4(color, baseColor.a);
 }

@@ -18,6 +18,28 @@ static const float PI = 3.14159265358979323846;
 static const float EPSILON = 0.0001;
 
 // ============================================================================
+// PBR Material Structure
+// ============================================================================
+
+// PBR material properties for Metallic-Roughness Workflow
+// Standard material representation compatible with glTF 2.0 and common PBR pipelines
+//
+// Members:
+//   albedo: Base color (diffuse for dielectrics, F0 for metals)
+//   metallic: Metalness factor (0 = dielectric, 1 = metal)
+//   roughness: Surface roughness (0 = smooth, 1 = rough)
+//   ao: Ambient occlusion factor (0 = fully occluded, 1 = no occlusion)
+//   emissive: Self-emission color (added to final output)
+struct PBRMaterial
+{
+    float3 albedo;
+    float metallic;
+    float roughness;
+    float ao;
+    float3 emissive;
+};
+
+// ============================================================================
 // Normal Distribution Function (NDF)
 // ============================================================================
 
@@ -245,6 +267,100 @@ float3 CalculatePBRLighting(
     float3 Lo = (kD * diffuse + specular) * lightColor * NdotL;
 
     return Lo;
+}
+
+// Calculate PBR direct lighting using PBRMaterial struct
+// Implements Metallic-Roughness Workflow with Cook-Torrance BRDF
+//
+// This function combines diffuse (Lambertian) and specular (Cook-Torrance)
+// reflections with proper energy conservation for metallic surfaces.
+//
+// Key concepts:
+//   - F0: Non-metals have constant 0.04 (4% reflectance), metals use albedo
+//   - kD: Diffuse ratio (1 - kS), metals have no diffuse (kD = 0 when metallic = 1)
+//   - Energy conservation: kS + kD = 1
+//
+// Parameters:
+//   N: Surface normal (normalized)
+//   V: View direction (normalized, from surface to camera)
+//   L: Light direction (normalized, from surface to light)
+//   radiance: Light color * intensity (incoming radiance from light)
+//   material: PBR material properties
+//
+// Returns: Outgoing radiance (reflected light) for this light source
+//          Note: Does NOT include ambient occlusion or emissive
+float3 CalculatePBRDirect(
+    float3 N,
+    float3 V,
+    float3 L,
+    float3 radiance,
+    PBRMaterial material)
+{
+    float3 H = normalize(V + L);
+
+    // F0 - Surface reflection at zero incidence
+    // Dielectrics: constant 0.04 (4% Fresnel reflectance)
+    // Metals: use albedo color (tinted reflections)
+    float3 F0 = float3(0.04, 0.04, 0.04);
+    F0 = lerp(F0, material.albedo, material.metallic);
+
+    // Cook-Torrance BRDF components
+    float NDF = DistributionGGX(N, H, material.roughness);
+    float G = GeometrySmith(N, V, L, material.roughness);
+    float3 F = FresnelSchlick(max(dot(H, V), 0.0), F0);
+
+    // Energy conservation
+    // kS = F (energy of light that gets reflected as specular)
+    // kD = 1 - kS (energy that gets refracted and becomes diffuse)
+    float3 kS = F;
+    float3 kD = float3(1.0, 1.0, 1.0) - kS;
+
+    // Metals have no diffuse reflection (all light is either reflected or absorbed)
+    kD *= 1.0 - material.metallic;
+
+    // Cook-Torrance specular BRDF: DGF / (4 * NdotV * NdotL)
+    float3 numerator = NDF * G * F;
+    float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + EPSILON;
+    float3 specular = numerator / denominator;
+
+    // NdotL: Lambert's cosine law
+    float NdotL = max(dot(N, L), 0.0);
+
+    // Combine diffuse and specular contributions
+    // Diffuse: Lambertian BRDF = albedo / PI
+    // The result is multiplied by incoming radiance and NdotL
+    return (kD * material.albedo / PI + specular) * radiance * NdotL;
+}
+
+// Calculate complete PBR direct lighting with ambient and emissive
+// Convenience function that wraps CalculatePBRDirect with ambient occlusion and emission
+//
+// Parameters:
+//   N: Surface normal (normalized)
+//   V: View direction (normalized)
+//   L: Light direction (normalized)
+//   radiance: Light color * intensity
+//   material: PBR material properties
+//   ambientLight: Ambient/environment light contribution
+//
+// Returns: Final color including direct lighting, ambient (with AO), and emissive
+float3 CalculatePBRDirectComplete(
+    float3 N,
+    float3 V,
+    float3 L,
+    float3 radiance,
+    PBRMaterial material,
+    float3 ambientLight)
+{
+    // Direct lighting from light source
+    float3 Lo = CalculatePBRDirect(N, V, L, radiance, material);
+
+    // Apply ambient with occlusion
+    // Metals have no diffuse reflection, so ambient diffuse is zero for pure metals
+    float3 ambient = ambientLight * material.albedo * material.ao * (1.0 - material.metallic);
+
+    // Combine direct, ambient, and emissive
+    return Lo + ambient + material.emissive;
 }
 
 // ============================================================================
