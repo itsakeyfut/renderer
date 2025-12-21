@@ -403,7 +403,7 @@ float3 CalculateIBL(
     PBRMaterial material,
     TextureCube<float4> irradianceMap,
     TextureCube<float4> prefilteredMap,
-    Texture2D<float2> brdfLUT,
+    Texture2D<float4> brdfLUT,
     SamplerState linearSampler)
 {
     // Calculate F0 (base reflectivity at normal incidence)
