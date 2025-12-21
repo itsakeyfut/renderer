@@ -77,19 +77,52 @@ Core::Ref<RHI::RHITexture> CreateDefaultWhiteTexture(const Core::Ref<RHI::RHIDev
 }
 
 /**
+ * @brief Create a 1x1x6 fallback cubemap for IBL (black/neutral).
+ *
+ * This is used as a fallback when no HDR environment map is loaded.
+ * The cubemap contains neutral ambient values (dark gray) for all 6 faces.
+ */
+Core::Ref<RHI::RHIImage> CreateFallbackCubemap(const Core::Ref<RHI::RHIDevice>& device)
+{
+    RHI::ImageDesc desc;
+    desc.Width = 1;
+    desc.Height = 1;
+    desc.ArrayLayers = 6;  // 6 faces for cubemap
+    desc.Format = VK_FORMAT_R8G8B8A8_UNORM;
+    desc.Usage = RHI::ImageUsage::Texture;
+    desc.IsCubemap = true;
+    desc.DebugName = "Fallback IBL Cubemap";
+
+    auto cubemap = RHI::RHIImage::Create(device, desc);
+    if (cubemap)
+    {
+        // Create 6 faces of 1x1 dark gray pixels (neutral ambient)
+        // Using dark gray (0.1, 0.1, 0.1) to provide minimal ambient lighting
+        uint32_t darkGrayPixels[6] = {
+            0xFF1A1A1A, 0xFF1A1A1A, 0xFF1A1A1A,
+            0xFF1A1A1A, 0xFF1A1A1A, 0xFF1A1A1A
+        };
+        cubemap->UploadData(device, darkGrayPixels, sizeof(darkGrayPixels));
+    }
+    return cubemap;
+}
+
+/**
  * @brief Update IBL descriptor sets with environment map textures.
  * @param device RHI device
  * @param descriptorSets Array of descriptor sets to update
  * @param envMap Environment map with IBL textures (can be nullptr for fallback)
  * @param sampler IBL sampler
- * @param fallbackTexture Default texture to use when envMap is nullptr
+ * @param fallbackCubemap Fallback cubemap for irradiance/prefiltered (bindings 0, 1)
+ * @param fallbackBrdfLut Fallback 2D texture for BRDF LUT (binding 2)
  */
 void UpdateIBLDescriptorSets(
     [[maybe_unused]] const Core::Ref<RHI::RHIDevice>& device,
     std::array<Core::Ref<RHI::RHIDescriptorSet>, Renderer::MAX_FRAMES_IN_FLIGHT>& descriptorSets,
     const Core::Ref<Resources::EnvironmentMap>& envMap,
     const Core::Ref<RHI::RHISampler>& sampler,
-    const Core::Ref<RHI::RHITexture>& fallbackTexture)
+    const Core::Ref<RHI::RHIImage>& fallbackCubemap,
+    const Core::Ref<RHI::RHITexture>& fallbackBrdfLut)
 {
     for (size_t i = 0; i < Renderer::MAX_FRAMES_IN_FLIGHT; ++i)
     {
@@ -109,14 +142,16 @@ void UpdateIBLDescriptorSets(
         else
         {
             // Bind fallback textures when no environment map is loaded
+            // Bindings 0, 1: Cubemap fallback for irradiance and prefiltered maps
             descriptorSets[i]->UpdateImage(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                fallbackTexture->GetImageView(), sampler->GetHandle(),
+                fallbackCubemap->GetImageView(), sampler->GetHandle(),
                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
             descriptorSets[i]->UpdateImage(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                fallbackTexture->GetImageView(), sampler->GetHandle(),
+                fallbackCubemap->GetImageView(), sampler->GetHandle(),
                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            // Binding 2: 2D texture fallback for BRDF LUT
             descriptorSets[i]->UpdateImage(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                fallbackTexture->GetImageView(), sampler->GetHandle(),
+                fallbackBrdfLut->GetImageView(), sampler->GetHandle(),
                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         }
     }
@@ -715,17 +750,25 @@ int main()
     }
     LOG_INFO("IBL descriptor sets created");
 
-    // Create fallback texture for IBL (will be replaced with actual env map later)
-    auto iblFallbackTexture = CreateDefaultWhiteTexture(device);
-    if (!iblFallbackTexture)
+    // Create fallback cubemap for IBL (irradiance and prefiltered maps)
+    auto iblFallbackCubemap = CreateFallbackCubemap(device);
+    if (!iblFallbackCubemap)
     {
-        LOG_FATAL("Failed to create IBL fallback texture!");
+        LOG_FATAL("Failed to create IBL fallback cubemap!");
+        return EXIT_FAILURE;
+    }
+
+    // Create fallback 2D texture for BRDF LUT
+    auto iblFallbackBrdfLut = CreateDefaultWhiteTexture(device);
+    if (!iblFallbackBrdfLut)
+    {
+        LOG_FATAL("Failed to create IBL fallback BRDF LUT texture!");
         return EXIT_FAILURE;
     }
 
     // Initialize IBL descriptor sets with fallback textures
     // This will be updated when an environment map is loaded
-    UpdateIBLDescriptorSets(device, iblDescriptorSets, nullptr, iblSampler, iblFallbackTexture);
+    UpdateIBLDescriptorSets(device, iblDescriptorSets, nullptr, iblSampler, iblFallbackCubemap, iblFallbackBrdfLut);
     LOG_INFO("IBL fallback textures bound");
 
     // =========================================================================
@@ -1197,7 +1240,7 @@ int main()
         if (environmentMap)
         {
             skyboxRenderer->SetEnvironmentMap(device, environmentMap);
-            UpdateIBLDescriptorSets(device, iblDescriptorSets, environmentMap, iblSampler, iblFallbackTexture);
+            UpdateIBLDescriptorSets(device, iblDescriptorSets, environmentMap, iblSampler, iblFallbackCubemap, iblFallbackBrdfLut);
             LOG_INFO("Loaded default HDR environment map: {}", defaultHDRPath);
         }
         else
@@ -1409,7 +1452,7 @@ int main()
                         environmentMap = newEnvMap;
                         skyboxRenderer->SetEnvironmentMap(device, environmentMap);
                         // Update IBL descriptor sets with the new environment map
-                        UpdateIBLDescriptorSets(device, iblDescriptorSets, environmentMap, iblSampler, iblFallbackTexture);
+                        UpdateIBLDescriptorSets(device, iblDescriptorSets, environmentMap, iblSampler, iblFallbackCubemap, iblFallbackBrdfLut);
                         LOG_INFO("Loaded HDR environment map with IBL: {}", filePath.value());
                     }
                     else
@@ -1899,7 +1942,8 @@ int main()
     iblDescriptorPool.reset();
     iblDescriptorLayout.reset();
     iblSampler.reset();
-    iblFallbackTexture.reset();
+    iblFallbackCubemap.reset();
+    iblFallbackBrdfLut.reset();
 
     // Material system cleanup
     // Order matters: clear instances first, then fallback, then textures, then pool
