@@ -10,6 +10,7 @@
 
 #include <gtest/gtest.h>
 #include "Renderer/DepthBuffer.h"
+#include "RHI/RHIDeletionQueue.h"
 #include "RHI/RHIDevice.h"
 #include "RHI/RHIPhysicalDevice.h"
 #include "RHI/RHIInstance.h"
@@ -54,10 +55,22 @@ protected:
         if (m_PhysicalDevice) {
             m_Device = RHI::RHIDevice::Create(m_Instance, m_PhysicalDevice, m_Surface);
         }
+
+        // Create deletion queue
+        if (m_Device) {
+            m_DeletionQueue = RHI::RHIDeletionQueue::Create();
+        }
     }
 
     void TearDown() override {
         m_DepthBuffer.reset();
+
+        // Flush deletion queue before destroying device
+        if (m_DeletionQueue) {
+            m_DeletionQueue->FlushAll();
+            m_DeletionQueue.reset();
+        }
+
         m_Device.reset();
         m_PhysicalDevice.reset();
 
@@ -74,6 +87,7 @@ protected:
     Core::Ref<RHI::RHIInstance> m_Instance;
     Core::Ref<RHI::RHIPhysicalDevice> m_PhysicalDevice;
     Core::Ref<RHI::RHIDevice> m_Device;
+    Core::Ref<RHI::RHIDeletionQueue> m_DeletionQueue;
     Core::Ref<Renderer::DepthBuffer> m_DepthBuffer;
     VkSurfaceKHR m_Surface = VK_NULL_HANDLE;
 };
@@ -91,7 +105,7 @@ TEST_F(DepthBufferTest, CreatesDepthBuffer) {
     desc.Format = VK_FORMAT_D32_SFLOAT;
     desc.DebugName = "TestDepthBuffer";
 
-    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, desc);
+    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, m_DeletionQueue, desc);
 
     ASSERT_NE(m_DepthBuffer, nullptr);
     EXPECT_NE(m_DepthBuffer->GetImage(), VK_NULL_HANDLE);
@@ -109,7 +123,7 @@ TEST_F(DepthBufferTest, CreatesWithDefaultFormat) {
     desc.Height = 1080;
     // Format defaults to VK_FORMAT_D32_SFLOAT
 
-    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, desc);
+    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, m_DeletionQueue, desc);
 
     ASSERT_NE(m_DepthBuffer, nullptr);
     EXPECT_EQ(m_DepthBuffer->GetFormat(), VK_FORMAT_D32_SFLOAT);
@@ -126,7 +140,7 @@ TEST_F(DepthBufferTest, CreatesSmallDepthBuffer) {
     desc.Width = 64;
     desc.Height = 64;
 
-    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, desc);
+    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, m_DeletionQueue, desc);
 
     ASSERT_NE(m_DepthBuffer, nullptr);
     EXPECT_EQ(m_DepthBuffer->GetWidth(), 64u);
@@ -140,7 +154,7 @@ TEST_F(DepthBufferTest, CreatesLargeDepthBuffer) {
     desc.Width = 4096;
     desc.Height = 2160;
 
-    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, desc);
+    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, m_DeletionQueue, desc);
 
     ASSERT_NE(m_DepthBuffer, nullptr);
     EXPECT_EQ(m_DepthBuffer->GetWidth(), 4096u);
@@ -154,7 +168,7 @@ TEST_F(DepthBufferTest, CreatesNonSquareDepthBuffer) {
     desc.Width = 1280;
     desc.Height = 720;
 
-    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, desc);
+    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, m_DeletionQueue, desc);
 
     ASSERT_NE(m_DepthBuffer, nullptr);
     EXPECT_EQ(m_DepthBuffer->GetWidth(), 1280u);
@@ -173,7 +187,7 @@ TEST_F(DepthBufferTest, CreatesD32FloatFormat) {
     desc.Height = 600;
     desc.Format = VK_FORMAT_D32_SFLOAT;
 
-    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, desc);
+    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, m_DeletionQueue, desc);
 
     ASSERT_NE(m_DepthBuffer, nullptr);
     EXPECT_EQ(m_DepthBuffer->GetFormat(), VK_FORMAT_D32_SFLOAT);
@@ -188,7 +202,7 @@ TEST_F(DepthBufferTest, CreatesD24S8Format) {
     desc.Height = 600;
     desc.Format = VK_FORMAT_D24_UNORM_S8_UINT;
 
-    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, desc);
+    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, m_DeletionQueue, desc);
 
     ASSERT_NE(m_DepthBuffer, nullptr);
     EXPECT_EQ(m_DepthBuffer->GetFormat(), VK_FORMAT_D24_UNORM_S8_UINT);
@@ -203,7 +217,7 @@ TEST_F(DepthBufferTest, CreatesD32S8Format) {
     desc.Height = 600;
     desc.Format = VK_FORMAT_D32_SFLOAT_S8_UINT;
 
-    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, desc);
+    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, m_DeletionQueue, desc);
 
     ASSERT_NE(m_DepthBuffer, nullptr);
     EXPECT_EQ(m_DepthBuffer->GetFormat(), VK_FORMAT_D32_SFLOAT_S8_UINT);
@@ -222,7 +236,7 @@ TEST_F(DepthBufferTest, HasStencilReturnsFalseForDepthOnly) {
     desc.Height = 600;
     desc.Format = VK_FORMAT_D32_SFLOAT;
 
-    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, desc);
+    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, m_DeletionQueue, desc);
 
     ASSERT_NE(m_DepthBuffer, nullptr);
     EXPECT_FALSE(m_DepthBuffer->HasStencil());
@@ -236,7 +250,7 @@ TEST_F(DepthBufferTest, HasStencilReturnsTrueForDepthStencil) {
     desc.Height = 600;
     desc.Format = VK_FORMAT_D24_UNORM_S8_UINT;
 
-    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, desc);
+    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, m_DeletionQueue, desc);
 
     ASSERT_NE(m_DepthBuffer, nullptr);
     EXPECT_TRUE(m_DepthBuffer->HasStencil());
@@ -253,7 +267,7 @@ TEST_F(DepthBufferTest, ResizeChangesSize) {
     desc.Width = 800;
     desc.Height = 600;
 
-    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, desc);
+    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, m_DeletionQueue, desc);
     ASSERT_NE(m_DepthBuffer, nullptr);
 
     bool result = m_DepthBuffer->Resize(m_Device, 1920, 1080);
@@ -271,7 +285,7 @@ TEST_F(DepthBufferTest, ResizePreservesFormat) {
     desc.Height = 600;
     desc.Format = VK_FORMAT_D24_UNORM_S8_UINT;
 
-    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, desc);
+    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, m_DeletionQueue, desc);
     ASSERT_NE(m_DepthBuffer, nullptr);
 
     VkFormat originalFormat = m_DepthBuffer->GetFormat();
@@ -288,7 +302,7 @@ TEST_F(DepthBufferTest, ResizeCreatesNewHandles) {
     desc.Width = 800;
     desc.Height = 600;
 
-    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, desc);
+    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, m_DeletionQueue, desc);
     ASSERT_NE(m_DepthBuffer, nullptr);
 
     // Store original handles for verification
@@ -310,7 +324,7 @@ TEST_F(DepthBufferTest, ResizeMultipleTimes) {
     desc.Width = 800;
     desc.Height = 600;
 
-    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, desc);
+    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, m_DeletionQueue, desc);
     ASSERT_NE(m_DepthBuffer, nullptr);
 
     // Resize multiple times
@@ -338,7 +352,7 @@ TEST_F(DepthBufferTest, ImageHandleIsValid) {
     desc.Width = 800;
     desc.Height = 600;
 
-    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, desc);
+    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, m_DeletionQueue, desc);
 
     ASSERT_NE(m_DepthBuffer, nullptr);
     EXPECT_NE(m_DepthBuffer->GetImage(), VK_NULL_HANDLE);
@@ -351,7 +365,7 @@ TEST_F(DepthBufferTest, ImageViewHandleIsValid) {
     desc.Width = 800;
     desc.Height = 600;
 
-    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, desc);
+    m_DepthBuffer = Renderer::DepthBuffer::Create(m_Device, m_DeletionQueue, desc);
 
     ASSERT_NE(m_DepthBuffer, nullptr);
     EXPECT_NE(m_DepthBuffer->GetImageView(), VK_NULL_HANDLE);
@@ -372,7 +386,7 @@ TEST_F(DepthBufferTest, DestructorCleansUpResources) {
         desc.Width = 800;
         desc.Height = 600;
 
-        auto depthBuffer = Renderer::DepthBuffer::Create(m_Device, desc);
+        auto depthBuffer = Renderer::DepthBuffer::Create(m_Device, m_DeletionQueue, desc);
         ASSERT_NE(depthBuffer, nullptr);
 
         imageHandle = depthBuffer->GetImage();
@@ -404,8 +418,8 @@ TEST_F(DepthBufferTest, CreateMultipleDepthBuffers) {
     desc2.Height = 1080;
     desc2.Format = VK_FORMAT_D24_UNORM_S8_UINT;
 
-    auto depthBuffer1 = Renderer::DepthBuffer::Create(m_Device, desc1);
-    auto depthBuffer2 = Renderer::DepthBuffer::Create(m_Device, desc2);
+    auto depthBuffer1 = Renderer::DepthBuffer::Create(m_Device, m_DeletionQueue, desc1);
+    auto depthBuffer2 = Renderer::DepthBuffer::Create(m_Device, m_DeletionQueue, desc2);
 
     ASSERT_NE(depthBuffer1, nullptr);
     ASSERT_NE(depthBuffer2, nullptr);

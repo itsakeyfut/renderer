@@ -4,8 +4,9 @@
  */
 
 #include "Renderer/DepthBuffer.h"
-#include "RHI/RHIDevice.h"
 #include "RHI/RHICommandBuffer.h"
+#include "RHI/RHIDeletionQueue.h"
+#include "RHI/RHIDevice.h"
 #include "Core/Log.h"
 
 #include <vk_mem_alloc.h>
@@ -14,10 +15,11 @@ namespace Renderer
 {
     Core::Ref<DepthBuffer> DepthBuffer::Create(
         const Core::Ref<RHI::RHIDevice>& device,
+        const Core::Ref<RHI::RHIDeletionQueue>& deletionQueue,
         const DepthBufferDesc& desc)
     {
         auto depthBuffer = Core::Ref<DepthBuffer>(new DepthBuffer());
-        if (!depthBuffer->Initialize(device, desc))
+        if (!depthBuffer->Initialize(device, deletionQueue, desc))
         {
             return nullptr;
         }
@@ -26,29 +28,46 @@ namespace Renderer
 
     DepthBuffer::~DepthBuffer()
     {
-        if (m_ImageView != VK_NULL_HANDLE && m_Allocator != nullptr)
+        // Queue resources for deferred deletion to avoid GPU resource conflicts
+        if (m_DeletionQueue && m_ImageView != VK_NULL_HANDLE)
         {
-            VmaAllocatorInfo allocInfo;
-            vmaGetAllocatorInfo(m_Allocator, &allocInfo);
-            vkDestroyImageView(allocInfo.device, m_ImageView, nullptr);
+            VkDevice device = m_Device;
+            VkImageView imageView = m_ImageView;
+            m_DeletionQueue->Push([device, imageView]() {
+                vkDestroyImageView(device, imageView, nullptr);
+                LOG_DEBUG("Destroyed depth buffer image view (deferred)");
+            });
             m_ImageView = VK_NULL_HANDLE;
-            LOG_DEBUG("Destroyed depth buffer image view");
         }
 
-        if (m_Image != VK_NULL_HANDLE && m_Allocator != nullptr)
+        if (m_DeletionQueue && m_Image != VK_NULL_HANDLE && m_Allocator != nullptr)
         {
-            vmaDestroyImage(m_Allocator, m_Image, m_Allocation);
+            VmaAllocator allocator = m_Allocator;
+            VkImage image = m_Image;
+            VmaAllocation allocation = m_Allocation;
+            m_DeletionQueue->Push([allocator, image, allocation]() {
+                vmaDestroyImage(allocator, image, allocation);
+                LOG_DEBUG("Destroyed depth buffer image (deferred)");
+            });
             m_Image = VK_NULL_HANDLE;
             m_Allocation = nullptr;
-            LOG_DEBUG("Destroyed depth buffer image");
         }
     }
 
     bool DepthBuffer::Initialize(
         const Core::Ref<RHI::RHIDevice>& device,
+        const Core::Ref<RHI::RHIDeletionQueue>& deletionQueue,
         const DepthBufferDesc& desc)
     {
+        if (!deletionQueue)
+        {
+            LOG_ERROR("Deletion queue cannot be null");
+            return false;
+        }
+
+        m_Device = device->GetHandle();
         m_Allocator = device->GetAllocator();
+        m_DeletionQueue = deletionQueue;
         m_Width = desc.Width;
         m_Height = desc.Height;
         m_Format = desc.Format;
@@ -147,15 +166,27 @@ namespace Renderer
 
     void DepthBuffer::Destroy(const Core::Ref<RHI::RHIDevice>& device)
     {
-        if (m_ImageView != VK_NULL_HANDLE)
+        // Queue resources for deferred deletion to avoid GPU resource conflicts
+        if (m_DeletionQueue && m_ImageView != VK_NULL_HANDLE)
         {
-            vkDestroyImageView(device->GetHandle(), m_ImageView, nullptr);
+            VkDevice vkDevice = device->GetHandle();
+            VkImageView imageView = m_ImageView;
+            m_DeletionQueue->Push([vkDevice, imageView]() {
+                vkDestroyImageView(vkDevice, imageView, nullptr);
+                LOG_DEBUG("Destroyed depth buffer image view (deferred via Destroy)");
+            });
             m_ImageView = VK_NULL_HANDLE;
         }
 
-        if (m_Image != VK_NULL_HANDLE)
+        if (m_DeletionQueue && m_Image != VK_NULL_HANDLE)
         {
-            vmaDestroyImage(device->GetAllocator(), m_Image, m_Allocation);
+            VmaAllocator allocator = device->GetAllocator();
+            VkImage image = m_Image;
+            VmaAllocation allocation = m_Allocation;
+            m_DeletionQueue->Push([allocator, image, allocation]() {
+                vmaDestroyImage(allocator, image, allocation);
+                LOG_DEBUG("Destroyed depth buffer image (deferred via Destroy)");
+            });
             m_Image = VK_NULL_HANDLE;
             m_Allocation = nullptr;
         }
