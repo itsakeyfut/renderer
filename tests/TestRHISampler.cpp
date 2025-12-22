@@ -34,7 +34,7 @@ protected:
         windowConfig.Height = 100;
         windowConfig.Title = "RHI Sampler Test Window";
         windowConfig.Visible = false;
-        m_Window = std::make_unique<Platform::Window>(windowConfig);
+        m_Window = Core::CreateScope<Platform::Window>(windowConfig);
 
         // Create Vulkan instance
         RHI::RHIInstanceConfig instanceConfig;
@@ -71,7 +71,7 @@ protected:
         m_Window.reset();
     }
 
-    std::unique_ptr<Platform::Window> m_Window;
+    Core::Scope<Platform::Window> m_Window;
     Core::Ref<RHI::RHIInstance> m_Instance;
     Core::Ref<RHI::RHIPhysicalDevice> m_PhysicalDevice;
     Core::Ref<RHI::RHIDevice> m_Device;

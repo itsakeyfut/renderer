@@ -38,7 +38,7 @@ class ResourcePoolTest : public ::testing::Test {
 protected:
     void SetUp() override
     {
-        pool = std::make_unique<Resources::ResourcePool<Resources::Texture>>();
+        pool = Core::CreateScope<Resources::ResourcePool<Resources::Texture>>();
     }
 
     void TearDown() override
@@ -46,7 +46,7 @@ protected:
         pool->Clear();
     }
 
-    std::unique_ptr<Resources::ResourcePool<Resources::Texture>> pool;
+    Core::Scope<Resources::ResourcePool<Resources::Texture>> pool;
 };
 
 TEST_F(ResourcePoolTest, AddAndGet)

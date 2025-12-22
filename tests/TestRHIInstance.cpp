@@ -32,14 +32,14 @@ protected:
         windowConfig.Height = 100;
         windowConfig.Title = "RHI Test Window";
         windowConfig.Visible = false;  // Hide window during tests
-        m_Window = std::make_unique<Platform::Window>(windowConfig);
+        m_Window = Core::CreateScope<Platform::Window>(windowConfig);
     }
 
     void TearDown() override {
         m_Window.reset();
     }
 
-    std::unique_ptr<Platform::Window> m_Window;
+    Core::Scope<Platform::Window> m_Window;
 };
 
 // =============================================================================
