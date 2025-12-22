@@ -32,7 +32,7 @@ protected:
         windowConfig.Height = 100;
         windowConfig.Title = "RHI Physical Device Test Window";
         windowConfig.Visible = false;  // Hide window during tests
-        m_Window = std::make_unique<Platform::Window>(windowConfig);
+        m_Window = Core::CreateScope<Platform::Window>(windowConfig);
 
         // Create Vulkan instance
         RHI::RHIInstanceConfig instanceConfig;
@@ -54,7 +54,7 @@ protected:
         m_Window.reset();
     }
 
-    std::unique_ptr<Platform::Window> m_Window;
+    Core::Scope<Platform::Window> m_Window;
     Core::Ref<RHI::RHIInstance> m_Instance;
     VkSurfaceKHR m_Surface = VK_NULL_HANDLE;
 };
