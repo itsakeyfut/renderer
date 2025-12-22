@@ -59,6 +59,12 @@ namespace Renderer
         const Core::Ref<RHI::RHIDeletionQueue>& deletionQueue,
         const DepthBufferDesc& desc)
     {
+        if (!deletionQueue)
+        {
+            LOG_ERROR("Deletion queue cannot be null");
+            return false;
+        }
+
         m_Device = device->GetHandle();
         m_Allocator = device->GetAllocator();
         m_DeletionQueue = deletionQueue;

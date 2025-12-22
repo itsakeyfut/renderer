@@ -54,7 +54,15 @@ namespace Renderer
             m_Allocation = nullptr;
         }
 
-        // Sampler is released automatically via Ref<>
+        // Queue sampler for deferred deletion
+        if (m_DeletionQueue && m_Sampler)
+        {
+            Core::Ref<RHI::RHISampler> sampler = std::move(m_Sampler);
+            m_DeletionQueue->Push([sampler]() {
+                // Sampler destructor called when lambda is destroyed after frame delay
+                LOG_DEBUG("Destroyed shadow map sampler (deferred)");
+            });
+        }
         m_Sampler.reset();
     }
 
@@ -63,6 +71,12 @@ namespace Renderer
         const Core::Ref<RHI::RHIDeletionQueue>& deletionQueue,
         const ShadowMapDesc& desc)
     {
+        if (!deletionQueue)
+        {
+            LOG_ERROR("Deletion queue cannot be null");
+            return false;
+        }
+
         m_Device = device->GetHandle();
         m_Allocator = device->GetAllocator();
         m_DeletionQueue = deletionQueue;
