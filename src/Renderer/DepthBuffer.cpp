@@ -166,15 +166,27 @@ namespace Renderer
 
     void DepthBuffer::Destroy(const Core::Ref<RHI::RHIDevice>& device)
     {
-        if (m_ImageView != VK_NULL_HANDLE)
+        // Queue resources for deferred deletion to avoid GPU resource conflicts
+        if (m_DeletionQueue && m_ImageView != VK_NULL_HANDLE)
         {
-            vkDestroyImageView(device->GetHandle(), m_ImageView, nullptr);
+            VkDevice vkDevice = device->GetHandle();
+            VkImageView imageView = m_ImageView;
+            m_DeletionQueue->Push([vkDevice, imageView]() {
+                vkDestroyImageView(vkDevice, imageView, nullptr);
+                LOG_DEBUG("Destroyed depth buffer image view (deferred via Destroy)");
+            });
             m_ImageView = VK_NULL_HANDLE;
         }
 
-        if (m_Image != VK_NULL_HANDLE)
+        if (m_DeletionQueue && m_Image != VK_NULL_HANDLE)
         {
-            vmaDestroyImage(device->GetAllocator(), m_Image, m_Allocation);
+            VmaAllocator allocator = device->GetAllocator();
+            VkImage image = m_Image;
+            VmaAllocation allocation = m_Allocation;
+            m_DeletionQueue->Push([allocator, image, allocation]() {
+                vmaDestroyImage(allocator, image, allocation);
+                LOG_DEBUG("Destroyed depth buffer image (deferred via Destroy)");
+            });
             m_Image = VK_NULL_HANDLE;
             m_Allocation = nullptr;
         }
