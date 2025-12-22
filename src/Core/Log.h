@@ -23,9 +23,10 @@
 
 #pragma once
 
+#include "Types.h"
+
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/ostr.h>
-#include <memory>
 
 namespace Core {
 
@@ -61,7 +62,7 @@ public:
      * @brief Gets the application logger instance.
      * @return Shared pointer to the spdlog logger.
      */
-    static std::shared_ptr<spdlog::logger>& GetLogger() { return s_Logger; }
+    static Ref<spdlog::logger>& GetLogger() { return s_Logger; }
 
     /**
      * @brief Checks if the logging system has been initialized.
@@ -152,7 +153,7 @@ public:
     }
 
 private:
-    static std::shared_ptr<spdlog::logger> s_Logger;
+    static Ref<spdlog::logger> s_Logger;
 };
 
 } // namespace Core

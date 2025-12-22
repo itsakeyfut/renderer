@@ -314,7 +314,7 @@ private:
         std::string Path;
         TextureDesc Desc;
         TextureLoadCallback Callback;
-        std::shared_ptr<std::promise<TextureHandle>> Promise;
+        Core::Ref<std::promise<TextureHandle>> Promise;
         LoadPriority Priority;
     };
 
@@ -325,7 +325,7 @@ private:
         std::string Path;
         ModelDesc Desc;
         ModelLoadCallback Callback;
-        std::shared_ptr<std::promise<ModelHandle>> Promise;
+        Core::Ref<std::promise<ModelHandle>> Promise;
         LoadPriority Priority;
     };
 
@@ -339,7 +339,7 @@ private:
         std::string Path;
         Core::Ref<TextureData> Data;  ///< CPU-loaded pixel data (GPU upload happens on main thread)
         TextureLoadCallback Callback;
-        std::shared_ptr<std::promise<TextureHandle>> Promise;
+        Core::Ref<std::promise<TextureHandle>> Promise;
         bool Success;
     };
 
@@ -350,7 +350,7 @@ private:
         std::string Path;
         Core::Ref<Model> Model;
         ModelLoadCallback Callback;
-        std::shared_ptr<std::promise<ModelHandle>> Promise;
+        Core::Ref<std::promise<ModelHandle>> Promise;
         bool Success;
     };
 
@@ -400,11 +400,11 @@ private:
     // Pending callbacks for duplicate load requests (texture)
     // When multiple callers request the same texture, all callbacks are stored here
     std::unordered_map<std::string, std::vector<TextureLoadCallback>> m_PendingTextureCallbacks;
-    std::unordered_map<std::string, std::vector<std::shared_ptr<std::promise<TextureHandle>>>> m_PendingTexturePromises;
+    std::unordered_map<std::string, std::vector<Core::Ref<std::promise<TextureHandle>>>> m_PendingTexturePromises;
 
     // Pending callbacks for duplicate load requests (model)
     std::unordered_map<std::string, std::vector<ModelLoadCallback>> m_PendingModelCallbacks;
-    std::unordered_map<std::string, std::vector<std::shared_ptr<std::promise<ModelHandle>>>> m_PendingModelPromises;
+    std::unordered_map<std::string, std::vector<Core::Ref<std::promise<ModelHandle>>>> m_PendingModelPromises;
 
     // Progress callback
     ProgressCallback m_ProgressCallback;
