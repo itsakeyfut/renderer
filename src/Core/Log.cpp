@@ -11,26 +11,26 @@
 
 namespace Core {
 
-std::shared_ptr<spdlog::logger> Log::s_Logger = nullptr;
+Ref<spdlog::logger> Log::s_Logger = nullptr;
 
 void Log::Init(bool enableFileOutput, const char* logFilePath) {
     // Create sinks
     std::vector<spdlog::sink_ptr> sinks;
 
     // Console sink with color support
-    auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+    auto consoleSink = CreateRef<spdlog::sinks::stdout_color_sink_mt>();
     consoleSink->set_pattern("%^[%T] [%l] %v%$");
     sinks.push_back(consoleSink);
 
     // Optional file sink
     if (enableFileOutput && logFilePath != nullptr) {
-        auto fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logFilePath, true);
+        auto fileSink = CreateRef<spdlog::sinks::basic_file_sink_mt>(logFilePath, true);
         fileSink->set_pattern("[%Y-%m-%d %T.%e] [%l] %v");
         sinks.push_back(fileSink);
     }
 
     // Create logger with all sinks
-    s_Logger = std::make_shared<spdlog::logger>("RENDERER", sinks.begin(), sinks.end());
+    s_Logger = CreateRef<spdlog::logger>("RENDERER", sinks.begin(), sinks.end());
     spdlog::register_logger(s_Logger);
 
     // Set log level based on build configuration

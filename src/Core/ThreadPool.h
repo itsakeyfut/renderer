@@ -113,7 +113,7 @@ public:
     {
         using ReturnType = std::invoke_result_t<F, Args...>;
 
-        auto task = std::make_shared<std::packaged_task<ReturnType()>>(
+        auto task = CreateRef<std::packaged_task<ReturnType()>>(
             std::bind(std::forward<F>(func), std::forward<Args>(args)...)
         );
 

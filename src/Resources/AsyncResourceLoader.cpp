@@ -152,7 +152,7 @@ std::future<TextureHandle> AsyncResourceLoader::LoadTextureAsync(
     LoadPriority priority,
     const TextureDesc& desc)
 {
-    auto promise = std::make_shared<std::promise<TextureHandle>>();
+    auto promise = Core::CreateRef<std::promise<TextureHandle>>();
     auto future = promise->get_future();
 
     if (m_ShuttingDown) {
@@ -329,7 +329,7 @@ std::future<ModelHandle> AsyncResourceLoader::LoadModelAsync(
     LoadPriority priority,
     const ModelDesc& desc)
 {
-    auto promise = std::make_shared<std::promise<ModelHandle>>();
+    auto promise = Core::CreateRef<std::promise<ModelHandle>>();
     auto future = promise->get_future();
 
     if (m_ShuttingDown) {
@@ -464,7 +464,7 @@ size_t AsyncResourceLoader::ProcessCompletedLoads(size_t maxProcessCount)
 
         // Remove from active requests and get any pending callbacks/promises
         std::vector<TextureLoadCallback> pendingCallbacks;
-        std::vector<std::shared_ptr<std::promise<TextureHandle>>> pendingPromises;
+        std::vector<Core::Ref<std::promise<TextureHandle>>> pendingPromises;
         {
             std::lock_guard<std::mutex> lock(m_RequestsMutex);
             m_ActiveRequests.erase(textureResult.Path);
@@ -546,7 +546,7 @@ size_t AsyncResourceLoader::ProcessCompletedLoads(size_t maxProcessCount)
 
         // Remove from active requests and get any pending callbacks/promises
         std::vector<ModelLoadCallback> pendingCallbacks;
-        std::vector<std::shared_ptr<std::promise<ModelHandle>>> pendingPromises;
+        std::vector<Core::Ref<std::promise<ModelHandle>>> pendingPromises;
         {
             std::lock_guard<std::mutex> lock(m_RequestsMutex);
             m_ActiveRequests.erase(modelResult.Path);
