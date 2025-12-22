@@ -2,8 +2,8 @@
  * @file TestRHICommandPool.cpp
  * @brief Test file for RHI/RHICommandPool.h using GoogleTest.
  *
- * This file tests that the RHICommandPool class correctly creates
- * command pools and manages command buffer allocation.
+ * This file tests that the RHICommandPool class correctly handles
+ * pool creation, configuration, reset, and lifecycle management.
  *
  * Note: These tests require a Vulkan-capable system to pass.
  */
