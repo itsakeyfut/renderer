@@ -1923,9 +1923,6 @@ int main()
 
     device->WaitIdle();
 
-    // Flush deletion queue after GPU is idle but before destroying resources
-    deletionQueue->FlushAll();
-
     imguiRenderer.reset();
     skyboxRenderer.reset();
     pipeline.reset();
@@ -1972,6 +1969,9 @@ int main()
     frameManager.reset();
     depthBuffer.reset();
     swapchain.reset();
+
+    // Flush deletion queue after all resources are destroyed but before device
+    deletionQueue->FlushAll();
 
     vkDestroySurfaceKHR(instance->GetHandle(), surface, nullptr);
 
