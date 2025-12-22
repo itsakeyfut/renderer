@@ -23,6 +23,7 @@ namespace RHI
 {
     class RHIDevice;
     class RHICommandBuffer;
+    class RHIDeletionQueue;
     class RHISampler;
 } // namespace RHI
 
@@ -65,7 +66,7 @@ namespace Renderer
      * // Create shadow map
      * ShadowMapDesc desc;
      * desc.Resolution = 2048;
-     * auto shadowMap = ShadowMap::Create(device, desc);
+     * auto shadowMap = ShadowMap::Create(device, deletionQueue, desc);
      *
      * // Set light matrices
      * shadowMap->SetLightMatrices(lightView, lightProjection);
@@ -88,15 +89,17 @@ namespace Renderer
         /**
          * @brief Factory method to create a shadow map
          * @param device The logical device
+         * @param deletionQueue Deletion queue for deferred resource cleanup
          * @param desc Shadow map description
          * @return Shared pointer to the created shadow map, or nullptr on failure
          */
         static Core::Ref<ShadowMap> Create(
             const Core::Ref<RHI::RHIDevice>& device,
+            const Core::Ref<RHI::RHIDeletionQueue>& deletionQueue,
             const ShadowMapDesc& desc = ShadowMapDesc{});
 
         /**
-         * @brief Destructor - destroys image, image view, and sampler
+         * @brief Destructor - queues image and image view for deferred deletion
          */
         ~ShadowMap();
 
@@ -221,11 +224,13 @@ namespace Renderer
         /**
          * @brief Initialize the shadow map
          * @param device The logical device
+         * @param deletionQueue Deletion queue for deferred resource cleanup
          * @param desc Shadow map description
          * @return true on success, false on failure
          */
         bool Initialize(
             const Core::Ref<RHI::RHIDevice>& device,
+            const Core::Ref<RHI::RHIDeletionQueue>& deletionQueue,
             const ShadowMapDesc& desc);
 
         /**
@@ -261,11 +266,13 @@ namespace Renderer
             VkImageLayout newLayout);
 
         // Vulkan resources
+        VkDevice m_Device = VK_NULL_HANDLE;
         VmaAllocator m_Allocator = nullptr;
         VkImage m_Image = VK_NULL_HANDLE;
         VkImageView m_ImageView = VK_NULL_HANDLE;
         VmaAllocation m_Allocation = nullptr;
         Core::Ref<RHI::RHISampler> m_Sampler;
+        Core::Ref<RHI::RHIDeletionQueue> m_DeletionQueue;
         VkImageLayout m_CurrentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
         // Configuration

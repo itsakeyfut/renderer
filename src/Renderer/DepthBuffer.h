@@ -22,6 +22,7 @@ namespace RHI
 {
     class RHIDevice;
     class RHICommandBuffer;
+    class RHIDeletionQueue;
 } // namespace RHI
 
 namespace Renderer
@@ -67,7 +68,7 @@ namespace Renderer
      * desc.Width = swapchain->GetExtent().width;
      * desc.Height = swapchain->GetExtent().height;
      *
-     * auto depthBuffer = DepthBuffer::Create(device, desc);
+     * auto depthBuffer = DepthBuffer::Create(device, deletionQueue, desc);
      * if (depthBuffer) {
      *     // Use in rendering
      *     renderConfig.Depth.ImageView = depthBuffer->GetImageView();
@@ -83,15 +84,17 @@ namespace Renderer
         /**
          * @brief Factory method to create a depth buffer
          * @param device The logical device
+         * @param deletionQueue Deletion queue for deferred resource cleanup
          * @param desc Depth buffer description
          * @return Shared pointer to the created depth buffer, or nullptr on failure
          */
         static Core::Ref<DepthBuffer> Create(
             const Core::Ref<RHI::RHIDevice>& device,
+            const Core::Ref<RHI::RHIDeletionQueue>& deletionQueue,
             const DepthBufferDesc& desc);
 
         /**
-         * @brief Destructor - destroys image and image view
+         * @brief Destructor - queues image and image view for deferred deletion
          */
         ~DepthBuffer();
 
@@ -184,11 +187,13 @@ namespace Renderer
         /**
          * @brief Initialize the depth buffer
          * @param device The logical device
+         * @param deletionQueue Deletion queue for deferred resource cleanup
          * @param desc Depth buffer description
          * @return true on success, false on failure
          */
         bool Initialize(
             const Core::Ref<RHI::RHIDevice>& device,
+            const Core::Ref<RHI::RHIDeletionQueue>& deletionQueue,
             const DepthBufferDesc& desc);
 
         /**
@@ -211,10 +216,12 @@ namespace Renderer
          */
         void Destroy(const Core::Ref<RHI::RHIDevice>& device);
 
+        VkDevice m_Device = VK_NULL_HANDLE;
         VmaAllocator m_Allocator = nullptr;
         VkImage m_Image = VK_NULL_HANDLE;
         VkImageView m_ImageView = VK_NULL_HANDLE;
         VmaAllocation m_Allocation = nullptr;
+        Core::Ref<RHI::RHIDeletionQueue> m_DeletionQueue;
         VkFormat m_Format = VK_FORMAT_D32_SFLOAT;
         uint32_t m_Width = 0;
         uint32_t m_Height = 0;

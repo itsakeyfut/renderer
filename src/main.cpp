@@ -12,6 +12,7 @@
 #include "Platform/FileDialog.h"
 #include "Platform/Input.h"
 #include "Platform/Window.h"
+#include "RHI/RHIDeletionQueue.h"
 #include "RHI/RHIInstance.h"
 #include "RHI/RHIPhysicalDevice.h"
 #include "RHI/RHIDevice.h"
@@ -601,6 +602,12 @@ int main()
     LOG_INFO("Logical device created");
 
     // =========================================================================
+    // Deletion Queue
+    // =========================================================================
+    auto deletionQueue = RHI::RHIDeletionQueue::Create();
+    LOG_INFO("Deletion queue created");
+
+    // =========================================================================
     // Swapchain Creation
     // =========================================================================
     uint32_t fbWidth = 0;
@@ -626,7 +633,7 @@ int main()
     depthBufferDesc.Height = fbHeight;
     depthBufferDesc.Format = VK_FORMAT_D32_SFLOAT;
 
-    auto depthBuffer = Renderer::DepthBuffer::Create(device, depthBufferDesc);
+    auto depthBuffer = Renderer::DepthBuffer::Create(device, deletionQueue, depthBufferDesc);
     if (!depthBuffer)
     {
         LOG_FATAL("Failed to create depth buffer!");
@@ -1915,6 +1922,9 @@ int main()
     LOG_INFO("Shutting down...");
 
     device->WaitIdle();
+
+    // Flush deletion queue after GPU is idle but before destroying resources
+    deletionQueue->FlushAll();
 
     imguiRenderer.reset();
     skyboxRenderer.reset();
