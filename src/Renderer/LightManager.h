@@ -15,9 +15,13 @@
 #include "RHI/RHIDescriptorPool.h"
 #include "RHI/RHIDescriptorSet.h"
 #include "RHI/RHIDevice.h"
+#include "RHI/RHISampler.h"
+#include "RHI/RHITexture.h"
 #include "Scene/Light.h"
 #include "FrameManager.h"
+#include "ShadowMap.h"
 
+#include <glm/glm.hpp>
 #include <vector>
 #include <array>
 
@@ -47,6 +51,7 @@ struct LightManagerConfig {
  * The LightManager provides:
  * - Storage for scene lights (1 directional, multiple point/spot)
  * - GPU buffer management (UBO for directional, storage buffers for arrays)
+ * - Shadow map integration for directional light shadows
  * - Descriptor set layout and sets for shader binding
  * - Per-frame update functionality for double/triple buffering
  *
@@ -54,6 +59,8 @@ struct LightManagerConfig {
  *   - Binding 0: LightUBO (uniform buffer)
  *   - Binding 1: PointLight storage buffer
  *   - Binding 2: SpotLight storage buffer
+ *   - Binding 3: Shadow map (combined image sampler with comparison)
+ *   - Binding 4: ShadowData UBO (light-space matrix, bias)
  */
 class LightManager {
 public:
@@ -151,6 +158,69 @@ public:
      */
     const Scene::SpotLight* GetSpotLight(size_t index) const;
 
+    // =========================================================================
+    // Shadow Map Integration
+    // =========================================================================
+
+    /**
+     * @brief Sets the shadow map for directional light shadows.
+     *
+     * This binds the shadow map texture and sampler to descriptor set binding 3.
+     * The shadow map should be rendered before the main pass and transitioned
+     * to shader read layout.
+     *
+     * @param shadowMap The shadow map to bind.
+     */
+    void SetShadowMap(const Core::Ref<ShadowMap>& shadowMap);
+
+    /**
+     * @brief Gets the current shadow map.
+     * @return The bound shadow map, or nullptr if none.
+     */
+    const Core::Ref<ShadowMap>& GetShadowMap() const { return m_ShadowMap; }
+
+    /**
+     * @brief Sets the shadow bias for shadow acne prevention.
+     * @param bias Depth bias value.
+     */
+    void SetShadowBias(float bias) { m_ShadowBias = bias; MarkDirty(); }
+
+    /**
+     * @brief Gets the current shadow bias.
+     * @return Shadow bias value.
+     */
+    float GetShadowBias() const { return m_ShadowBias; }
+
+    /**
+     * @brief Sets the normal bias for self-shadowing prevention.
+     * @param bias Normal-based offset value.
+     */
+    void SetNormalBias(float bias) { m_NormalBias = bias; MarkDirty(); }
+
+    /**
+     * @brief Gets the current normal bias.
+     * @return Normal bias value.
+     */
+    float GetNormalBias() const { return m_NormalBias; }
+
+    /**
+     * @brief Sets the shadow strength (darkness) multiplier.
+     * @param strength Shadow darkness (0.0 = no shadow, 1.0 = full shadow).
+     */
+    void SetShadowStrength(float strength) { m_ShadowStrength = glm::clamp(strength, 0.0f, 1.0f); MarkDirty(); }
+
+    /**
+     * @brief Gets the current shadow strength.
+     * @return Shadow strength value (0.0 to 1.0).
+     */
+    float GetShadowStrength() const { return m_ShadowStrength; }
+
+    /**
+     * @brief Checks if shadow mapping is enabled.
+     * @return true if a shadow map is bound.
+     */
+    bool IsShadowEnabled() const { return m_ShadowMap != nullptr; }
+
     /**
      * @brief Updates GPU buffers for the specified frame index.
      *
@@ -226,6 +296,15 @@ private:
     std::array<Core::Ref<RHI::RHIBuffer>, MAX_FRAMES_IN_FLIGHT> m_LightUBOs;
     std::array<Core::Ref<RHI::RHIBuffer>, MAX_FRAMES_IN_FLIGHT> m_PointLightBuffers;
     std::array<Core::Ref<RHI::RHIBuffer>, MAX_FRAMES_IN_FLIGHT> m_SpotLightBuffers;
+
+    // Shadow resources
+    Core::Ref<ShadowMap> m_ShadowMap;
+    Core::Ref<RHI::RHITexture> m_FallbackShadowMap;
+    Core::Ref<RHI::RHISampler> m_FallbackShadowSampler;
+    std::array<Core::Ref<RHI::RHIBuffer>, MAX_FRAMES_IN_FLIGHT> m_ShadowUBOs;
+    float m_ShadowBias = 0.005f;
+    float m_NormalBias = 0.02f;
+    float m_ShadowStrength = 1.0f;
 
     // Descriptor resources
     Core::Ref<RHI::RHIDescriptorSetLayout> m_DescriptorSetLayout;
