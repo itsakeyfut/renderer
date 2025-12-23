@@ -281,17 +281,11 @@ namespace Renderer
         std::array<glm::vec3, 8> frustumCorners;
 
         // Calculate the Z values in NDC for our split range
-        // Using reverse depth: near = 1, far = 0
-        float nearZ = 1.0f - (nearSplit - camera.GetNearPlane()) /
-                             (camera.GetFarPlane() - camera.GetNearPlane());
-        float farZ = 1.0f - (farSplit - camera.GetNearPlane()) /
-                            (camera.GetFarPlane() - camera.GetNearPlane());
-
-        // But with regular depth [0,1]: near = 0, far = 1
-        nearZ = (nearSplit - camera.GetNearPlane()) /
-                (camera.GetFarPlane() - camera.GetNearPlane());
-        farZ = (farSplit - camera.GetNearPlane()) /
-               (camera.GetFarPlane() - camera.GetNearPlane());
+        // With regular depth [0,1]: near = 0, far = 1
+        float nearZ = (nearSplit - camera.GetNearPlane()) /
+                      (camera.GetFarPlane() - camera.GetNearPlane());
+        float farZ = (farSplit - camera.GetNearPlane()) /
+                     (camera.GetFarPlane() - camera.GetNearPlane());
 
         // Define NDC frustum corners
         const glm::vec4 ndcCorners[8] = {
