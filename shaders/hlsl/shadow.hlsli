@@ -17,13 +17,15 @@
 #define SHADOW_HLSLI
 
 // Shadow parameters uniform buffer
-// Size: 80 bytes (aligned)
+// Size: 96 bytes (aligned for std140)
 struct ShadowParams
 {
     float4x4 LightSpaceMatrix;  // Combined light view-projection matrix
     float    ShadowBias;        // Depth bias for shadow acne prevention
     float    NormalBias;        // Normal-based bias offset
     float2   ShadowMapSize;     // Shadow map dimensions (width, height)
+    float    ShadowStrength;    // Shadow darkness (0=no shadow, 1=full shadow)
+    float3   Padding;           // Padding for std140 alignment
 };
 
 // ============================================================================
@@ -113,7 +115,9 @@ float CalculateShadow(
     // Average the 9 samples
     shadow /= 9.0;
 
-    return shadow;
+    // Apply shadow strength: lerp between fully lit (1.0) and shadow value
+    // ShadowStrength=1.0 gives full shadow darkness, 0.0 gives no shadows
+    return lerp(1.0, shadow, shadowParams.ShadowStrength);
 }
 
 /**
@@ -169,7 +173,10 @@ float CalculateShadowHard(
     float currentDepth = offsetProjCoords.z - bias;
 
     // Single sample (hard shadows)
-    return shadowMap.SampleCmpLevelZero(shadowSampler, offsetProjCoords.xy, currentDepth);
+    float shadow = shadowMap.SampleCmpLevelZero(shadowSampler, offsetProjCoords.xy, currentDepth);
+
+    // Apply shadow strength
+    return lerp(1.0, shadow, shadowParams.ShadowStrength);
 }
 
 #endif // SHADOW_HLSLI

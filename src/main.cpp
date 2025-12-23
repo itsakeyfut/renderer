@@ -29,6 +29,7 @@
 #include "Renderer/DepthBuffer.h"
 #include "Renderer/FrameManager.h"
 #include "Renderer/LightManager.h"
+#include "Renderer/ShadowMap.h"
 #include "Renderer/SkyboxRenderer.h"
 #include "Renderer/Debug/ImGuiRenderer.h"
 #include "Resources/ModelLoader.h"
@@ -695,6 +696,25 @@ int main()
     LOG_INFO("Light manager created with {} point lights", lightManager->GetPointLightCount());
 
     // =========================================================================
+    // Shadow Map
+    // =========================================================================
+    Renderer::ShadowMapDesc shadowMapDesc;
+    shadowMapDesc.Resolution = 2048;
+    shadowMapDesc.Format = VK_FORMAT_D32_SFLOAT;
+    shadowMapDesc.DebugName = "Directional Light Shadow Map";
+
+    auto shadowMap = Renderer::ShadowMap::Create(device, deletionQueue, shadowMapDesc);
+    if (!shadowMap)
+    {
+        LOG_FATAL("Failed to create shadow map!");
+        return EXIT_FAILURE;
+    }
+    LOG_INFO("Shadow map created: {}x{}", shadowMapDesc.Resolution, shadowMapDesc.Resolution);
+
+    // Set shadow map on light manager
+    lightManager->SetShadowMap(shadowMap);
+
+    // =========================================================================
     // IBL Descriptor Set Layout (Set 3)
     // =========================================================================
     // Bindings for IBL textures used in model_pbr_ibl.hlsl:
@@ -1167,6 +1187,113 @@ int main()
     LOG_INFO("Graphics pipeline created");
 
     // =========================================================================
+    // Shadow Pipeline (Depth-Only)
+    // =========================================================================
+    auto shadowVertexShader = RHI::RHIShader::CreateFromHLSL(
+        device,
+        "shaders/hlsl/vertex/shadow.hlsl",
+        RHI::ShaderStage::Vertex);
+    if (!shadowVertexShader)
+    {
+        LOG_FATAL("Failed to create shadow vertex shader!");
+        return EXIT_FAILURE;
+    }
+
+    auto shadowFragmentShader = RHI::RHIShader::CreateFromHLSL(
+        device,
+        "shaders/hlsl/pixel/shadow.hlsl",
+        RHI::ShaderStage::Fragment);
+    if (!shadowFragmentShader)
+    {
+        LOG_FATAL("Failed to create shadow fragment shader!");
+        return EXIT_FAILURE;
+    }
+    LOG_INFO("Shadow shaders loaded");
+
+    // Shadow pipeline descriptor layout (Set 0 for shadow constants)
+    auto shadowDescriptorLayout = RHI::RHIDescriptorSetLayout::Create(device, {
+        {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT}
+    });
+    if (!shadowDescriptorLayout)
+    {
+        LOG_FATAL("Failed to create shadow descriptor set layout!");
+        return EXIT_FAILURE;
+    }
+
+    // Shadow pipeline
+    RHI::GraphicsPipelineDesc shadowPipelineDesc;
+    shadowPipelineDesc.VertexShader = shadowVertexShader;
+    shadowPipelineDesc.FragmentShader = shadowFragmentShader;
+
+    // Vertex input (position only for shadow pass)
+    shadowPipelineDesc.VertexBindings.push_back(Resources::Vertex::GetBindingDescription());
+    for (const auto& attr : Resources::Vertex::GetAttributeDescriptions())
+    {
+        shadowPipelineDesc.VertexAttributes.push_back(attr);
+    }
+
+    // Rasterization - use front face culling for shadow pass to reduce peter-panning
+    shadowPipelineDesc.CullMode = VK_CULL_MODE_FRONT_BIT;
+    shadowPipelineDesc.FrontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+
+    // Depth testing
+    shadowPipelineDesc.DepthTestEnable = true;
+    shadowPipelineDesc.DepthWriteEnable = true;
+    shadowPipelineDesc.DepthCompareOp = VK_COMPARE_OP_LESS;
+
+    // No color attachments - depth only
+    shadowPipelineDesc.ColorBlendAttachments.clear();
+    shadowPipelineDesc.ColorAttachmentFormats.clear();
+    shadowPipelineDesc.DepthAttachmentFormat = shadowMap->GetFormat();
+
+    shadowPipelineDesc.DescriptorSetLayouts.push_back(shadowDescriptorLayout->GetHandle());
+
+    auto shadowPipeline = RHI::RHIPipeline::CreateGraphics(device, shadowPipelineDesc);
+    if (!shadowPipeline)
+    {
+        LOG_FATAL("Failed to create shadow pipeline!");
+        return EXIT_FAILURE;
+    }
+    LOG_INFO("Shadow pipeline created");
+
+    // Shadow uniform buffers (per frame)
+    std::array<Core::Ref<RHI::RHIBuffer>, Renderer::MAX_FRAMES_IN_FLIGHT> shadowConstantsUBOs;
+    for (size_t i = 0; i < Renderer::MAX_FRAMES_IN_FLIGHT; ++i)
+    {
+        RHI::BufferDesc uboDesc;
+        uboDesc.Size = sizeof(glm::mat4) * 2; // lightSpaceMatrix + model
+        uboDesc.Usage = RHI::BufferUsage::Uniform;
+        uboDesc.Memory = RHI::MemoryUsage::CpuToGpu;
+        uboDesc.DebugName = "Shadow Constants UBO";
+
+        shadowConstantsUBOs[i] = RHI::RHIBuffer::Create(device, uboDesc);
+        if (!shadowConstantsUBOs[i])
+        {
+            LOG_FATAL("Failed to create shadow constants UBO!");
+            return EXIT_FAILURE;
+        }
+    }
+
+    // Shadow descriptor pool and sets
+    auto shadowDescriptorPool = RHI::RHIDescriptorPool::Create(
+        device,
+        Renderer::MAX_FRAMES_IN_FLIGHT,
+        {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, Renderer::MAX_FRAMES_IN_FLIGHT}});
+
+    std::array<Core::Ref<RHI::RHIDescriptorSet>, Renderer::MAX_FRAMES_IN_FLIGHT> shadowDescriptorSets;
+    for (size_t i = 0; i < Renderer::MAX_FRAMES_IN_FLIGHT; ++i)
+    {
+        shadowDescriptorSets[i] = RHI::RHIDescriptorSet::Create(device, shadowDescriptorPool, shadowDescriptorLayout);
+        if (!shadowDescriptorSets[i])
+        {
+            LOG_FATAL("Failed to create shadow descriptor set!");
+            return EXIT_FAILURE;
+        }
+        shadowDescriptorSets[i]->UpdateBuffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, shadowConstantsUBOs[i]);
+    }
+    LOG_INFO("Shadow descriptor sets created");
+
+    // =========================================================================
     // ImGui Renderer
     // =========================================================================
     Renderer::ImGuiRendererConfig imguiConfig;
@@ -1396,7 +1523,53 @@ int main()
         objectData.NormalMatrix = glm::transpose(glm::inverse(objectData.Model));
         objectUBOs[frameIndex]->SetData(&objectData, sizeof(objectData));
 
-        // Update light GPU buffers
+        // Calculate light-space matrix for directional shadow
+        // Use a simple orthographic frustum centered around the scene
+        {
+            const auto& bounds = loadedModel->GetBounds();
+            float centerArr[3], extentArr[3];
+            bounds.GetCenter(centerArr);
+            bounds.GetExtents(extentArr);
+            glm::vec3 sceneCenter(centerArr[0], centerArr[1], centerArr[2]);
+            glm::vec3 sceneExtent(extentArr[0], extentArr[1], extentArr[2]);
+            float maxExtent = glm::max(sceneExtent.x, glm::max(sceneExtent.y, sceneExtent.z));
+
+            // Get directional light direction
+            Scene::DirectionalLight dirLight = lightManager->GetDirectionalLight();
+            glm::vec3 lightDir = glm::normalize(dirLight.Direction);
+
+            // Calculate light position far enough to cover the scene
+            float shadowDistance = maxExtent * 5.0f;
+            glm::vec3 lightPos = sceneCenter - lightDir * shadowDistance;
+
+            // Light view matrix (looking at scene center from light position)
+            glm::mat4 lightView = glm::lookAt(lightPos, sceneCenter, glm::vec3(0.0f, 1.0f, 0.0f));
+
+            // Orthographic projection to cover the scene
+            float orthoSize = maxExtent * 2.5f;
+            glm::mat4 lightProj = glm::ortho(
+                -orthoSize, orthoSize,
+                -orthoSize, orthoSize,
+                0.1f, shadowDistance * 2.0f);
+
+            // Vulkan clip space correction (Y is flipped, depth is [0,1])
+            lightProj[1][1] *= -1.0f;
+
+            // Update shadow map matrices
+            shadowMap->SetLightMatrices(lightView, lightProj);
+
+            // Update shadow constants UBO for shadow pass
+            struct ShadowConstants {
+                glm::mat4 lightSpaceMatrix;
+                glm::mat4 model;
+            };
+            ShadowConstants shadowConsts;
+            shadowConsts.lightSpaceMatrix = shadowMap->GetLightSpaceMatrix();
+            shadowConsts.model = glm::mat4(1.0f); // Identity model matrix
+            shadowConstantsUBOs[frameIndex]->SetData(&shadowConsts, sizeof(shadowConsts));
+        }
+
+        // Update light GPU buffers (includes shadow UBO)
         lightManager->UpdateGPUBuffers(frameIndex);
 
         // =====================================================================
@@ -1516,6 +1689,51 @@ int main()
                 {
                     lightManager->SetDirectionalLight(dirLight);
                 }
+            }
+
+            // Shadow Settings
+            if (ImGui::CollapsingHeader("Shadow Settings", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                ImGui::Text("Shadow Map: %dx%d", shadowMap->GetResolution(), shadowMap->GetResolution());
+
+                float shadowBias = lightManager->GetShadowBias();
+                if (ImGui::SliderFloat("Shadow Bias", &shadowBias, 0.0f, 0.05f, "%.4f"))
+                {
+                    lightManager->SetShadowBias(shadowBias);
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Reset##ShadowBias"))
+                {
+                    lightManager->SetShadowBias(0.005f);
+                }
+
+                float normalBias = lightManager->GetNormalBias();
+                if (ImGui::SliderFloat("Normal Bias", &normalBias, 0.0f, 0.1f, "%.3f"))
+                {
+                    lightManager->SetNormalBias(normalBias);
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Reset##NormalBias"))
+                {
+                    lightManager->SetNormalBias(0.02f);
+                }
+
+                ImGui::Separator();
+
+                float shadowStrength = lightManager->GetShadowStrength();
+                if (ImGui::SliderFloat("Shadow Strength", &shadowStrength, 0.0f, 1.0f, "%.2f"))
+                {
+                    lightManager->SetShadowStrength(shadowStrength);
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Reset##Strength"))
+                {
+                    lightManager->SetShadowStrength(1.0f);
+                }
+
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+                    "Tip: Set Strength to 0 then back to 1\n"
+                    "to see shadow effect clearly.");
             }
 
             // Point Lights
@@ -1748,6 +1966,41 @@ int main()
         VkImageView colorImageView = swapchain->GetImageView(imageIndex);
         VkImage colorImage = swapchain->GetImage(imageIndex);
 
+        // =====================================================================
+        // Shadow Pass - Render scene from light's perspective
+        // =====================================================================
+        {
+            // Begin shadow map rendering (handles layout transitions internally)
+            shadowMap->Begin(cmdBuffer);
+
+            // Bind shadow pipeline
+            cmdBuffer->BindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, shadowPipeline->GetHandle());
+
+            // Bind shadow descriptor set (contains light-space matrix and model)
+            cmdBuffer->BindDescriptorSets(
+                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                shadowPipeline->GetLayout(),
+                0,
+                {shadowDescriptorSets[frameIndex]->GetHandle()});
+
+            // Bind vertex and index buffers
+            cmdBuffer->BindVertexBuffer(vertexBuffer->GetHandle());
+            cmdBuffer->BindIndexBuffer(indexBuffer->GetHandle(), VK_INDEX_TYPE_UINT32);
+
+            // Draw all meshes (depth only, no material binding needed)
+            for (const auto& drawInfo : meshDrawInfos)
+            {
+                cmdBuffer->DrawIndexed(drawInfo.IndexCount, 1, drawInfo.IndexOffset, 0, 0);
+            }
+
+            // End shadow pass (transitions to shader read layout)
+            shadowMap->End(cmdBuffer);
+        }
+
+        // =====================================================================
+        // Main Pass - Render scene with shadows
+        // =====================================================================
+
         // Transition color attachment
         TransitionImageLayout(cmdBuffer, colorImage,
             VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -1931,6 +2184,18 @@ int main()
     pipelineDesc.FragmentShader.reset();
     fragmentShader.reset();
     vertexShader.reset();
+
+    // Shadow system cleanup
+    shadowPipeline.reset();
+    shadowPipelineDesc.VertexShader.reset();
+    shadowPipelineDesc.FragmentShader.reset();
+    shadowVertexShader.reset();
+    shadowFragmentShader.reset();
+    for (auto& ds : shadowDescriptorSets) ds.reset();
+    shadowDescriptorPool.reset();
+    shadowDescriptorLayout.reset();
+    for (auto& ubo : shadowConstantsUBOs) ubo.reset();
+    shadowMap.reset();
 
     for (auto& ds : descriptorSets) ds.reset();
     descriptorPool.reset();
