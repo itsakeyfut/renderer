@@ -323,6 +323,7 @@ target_link_libraries(Scene INTERFACE Core Platform Resources glm::glm)
 
 # Renderer library
 set(RENDERER_SOURCES
+    src/Renderer/CascadedShadowMap.cpp
     src/Renderer/DepthBuffer.cpp
     src/Renderer/FrameManager.cpp
     src/Renderer/LightManager.cpp
@@ -332,6 +333,7 @@ set(RENDERER_SOURCES
 )
 
 set(RENDERER_HEADERS
+    src/Renderer/CascadedShadowMap.h
     src/Renderer/DepthBuffer.h
     src/Renderer/FrameManager.h
     src/Renderer/LightManager.h
