@@ -17,9 +17,12 @@
 //     - binding 0: LightUBO (directional light + counts)
 //     - binding 1: PointLight storage buffer
 //     - binding 2: SpotLight storage buffer
+//     - binding 3: Shadow map + comparison sampler
+//     - binding 4: ShadowData UBO
 
 #include "../lights.hlsli"
 #include "../pbr.hlsli"
+#include "../shadow.hlsli"
 
 // Camera uniform buffer (Set 0, Binding 0)
 [[vk::binding(0, 0)]]
@@ -96,6 +99,20 @@ StructuredBuffer<PointLight> pointLights : register(t5);
 // Spot light storage buffer (Set 2, Binding 2)
 [[vk::binding(2, 2)]]
 StructuredBuffer<SpotLight> spotLights : register(t6);
+
+// Shadow map with comparison sampler (Set 2, Binding 3)
+// Uses SamplerComparisonState for hardware-accelerated depth comparison
+[[vk::binding(3, 2)]] [[vk::combinedImageSampler]]
+Texture2D<float> shadowMap : register(t7);
+[[vk::binding(3, 2)]] [[vk::combinedImageSampler]]
+SamplerComparisonState shadowSampler : register(s5);
+
+// Shadow uniform buffer (Set 2, Binding 4)
+[[vk::binding(4, 2)]]
+cbuffer ShadowData : register(b3)
+{
+    ShadowParams shadowParams;
+};
 
 struct PSInput
 {
@@ -213,14 +230,25 @@ float4 main(PSInput input) : SV_TARGET
     float3 lighting = float3(0.0, 0.0, 0.0);
 
     // -------------------------------------------------------------------------
-    // Directional light (from LightUBO)
+    // Directional light (from LightUBO) with shadow
     // -------------------------------------------------------------------------
     {
         float3 L = normalize(-directionalLight.Direction);
         float3 radiance = directionalLight.Color * directionalLight.Intensity;
 
+        // Calculate shadow factor using PCF
+        float shadow = CalculateShadow(
+            shadowMap,
+            shadowSampler,
+            shadowParams,
+            input.WorldPos,
+            N,
+            L
+        );
+
         // Calculate PBR direct lighting using Cook-Torrance BRDF
-        lighting += CalculatePBRDirect(N, V, L, radiance, material);
+        // Apply shadow factor to attenuate light contribution
+        lighting += CalculatePBRDirect(N, V, L, radiance, material) * shadow;
     }
 
     // -------------------------------------------------------------------------
