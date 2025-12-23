@@ -40,7 +40,7 @@ struct ShadowParams
  * @param shadowSampler   Comparison sampler (VK_COMPARE_OP_LESS_OR_EQUAL)
  * @param shadowParams    Shadow parameters (light matrix, bias, map size)
  * @param worldPos        Fragment world position
- * @param normal          Fragment normal (world space)
+ * @param normal          Fragment normal (world space, normalized)
  * @param lightDir        Light direction (normalized, toward light source)
  * @return Shadow factor: 1.0 = fully lit, 0.0 = fully shadowed
  */
@@ -85,9 +85,9 @@ float CalculateShadow(
     offsetProjCoords.xy = offsetProjCoords.xy * 0.5 + 0.5;
     offsetProjCoords.y = 1.0 - offsetProjCoords.y;
 
-    // Use offset coordinates for sampling, but original depth for comparison
+    // Use offset coordinates for both sampling and depth comparison
     float2 sampleCoords = offsetProjCoords.xy;
-    float currentDepth = projCoords.z - bias;
+    float currentDepth = offsetProjCoords.z - bias;
 
     // PCF: 3x3 kernel sampling for soft shadow edges
     // SampleCmpLevelZero performs hardware depth comparison
@@ -125,7 +125,7 @@ float CalculateShadow(
  * @param shadowSampler   Comparison sampler
  * @param shadowParams    Shadow parameters
  * @param worldPos        Fragment world position
- * @param normal          Fragment normal (world space)
+ * @param normal          Fragment normal (world space, normalized)
  * @param lightDir        Light direction (normalized, toward light source)
  * @return Shadow factor: 1.0 = fully lit, 0.0 = fully shadowed
  */
@@ -155,13 +155,21 @@ float CalculateShadowHard(
         return 1.0;
     }
 
-    // Calculate bias
+    // Calculate adaptive bias based on surface angle to light
     float NdotL = dot(normal, lightDir);
     float bias = max(shadowParams.ShadowBias * (1.0 - NdotL), 0.0005);
-    float currentDepth = projCoords.z - bias;
+
+    // Apply normal bias: offset sample position along surface normal
+    float3 offsetPos = worldPos + normal * shadowParams.NormalBias;
+    float4 offsetPosLightSpace = mul(shadowParams.LightSpaceMatrix, float4(offsetPos, 1.0));
+    float3 offsetProjCoords = offsetPosLightSpace.xyz / offsetPosLightSpace.w;
+    offsetProjCoords.xy = offsetProjCoords.xy * 0.5 + 0.5;
+    offsetProjCoords.y = 1.0 - offsetProjCoords.y;
+
+    float currentDepth = offsetProjCoords.z - bias;
 
     // Single sample (hard shadows)
-    return shadowMap.SampleCmpLevelZero(shadowSampler, projCoords.xy, currentDepth);
+    return shadowMap.SampleCmpLevelZero(shadowSampler, offsetProjCoords.xy, currentDepth);
 }
 
 #endif // SHADOW_HLSLI
