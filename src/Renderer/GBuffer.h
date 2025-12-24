@@ -10,6 +10,7 @@
 
 #include "Core/Types.h"
 
+#include <vector>
 #include <vulkan/vulkan.h>
 
 // Forward declare VMA types

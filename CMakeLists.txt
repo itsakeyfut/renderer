@@ -326,6 +326,7 @@ set(RENDERER_SOURCES
     src/Renderer/CascadedShadowMap.cpp
     src/Renderer/DepthBuffer.cpp
     src/Renderer/FrameManager.cpp
+    src/Renderer/GBuffer.cpp
     src/Renderer/LightManager.cpp
     src/Renderer/ShadowMap.cpp
     src/Renderer/SkyboxRenderer.cpp
@@ -336,6 +337,7 @@ set(RENDERER_HEADERS
     src/Renderer/CascadedShadowMap.h
     src/Renderer/DepthBuffer.h
     src/Renderer/FrameManager.h
+    src/Renderer/GBuffer.h
     src/Renderer/LightManager.h
     src/Renderer/ShadowMap.h
     src/Renderer/SkyboxRenderer.h

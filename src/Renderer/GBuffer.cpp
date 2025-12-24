@@ -156,6 +156,12 @@ namespace Renderer
         const Core::Ref<RHI::RHIDeletionQueue>& deletionQueue,
         const GBufferDesc& desc)
     {
+        if (!device)
+        {
+            LOG_ERROR("Device cannot be null");
+            return false;
+        }
+
         if (!deletionQueue)
         {
             LOG_ERROR("Deletion queue cannot be null");
