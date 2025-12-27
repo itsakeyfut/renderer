@@ -28,8 +28,10 @@
 float2 OctWrap(float2 v)
 {
     // Sign function that returns 1.0 for positive values, -1.0 for negative
-    // Using select() for vector conditional operations
-    float2 s = select(v.xy >= 0.0, float2(1.0, 1.0), float2(-1.0, -1.0));
+    // Using component-wise ternary for portability across compilers
+    float2 s;
+    s.x = (v.x >= 0.0) ? 1.0 : -1.0;
+    s.y = (v.y >= 0.0) ? 1.0 : -1.0;
     return (1.0 - abs(v.yx)) * s;
 }
 
@@ -75,8 +77,10 @@ float3 DecodeNormal(float2 encoded)
     float3 n = float3(f.x, f.y, 1.0 - abs(f.x) - abs(f.y));
 
     // Unfold corners for lower hemisphere
+    // Using component-wise ternary for portability across compilers
     float t = saturate(-n.z);
-    n.xy += select(n.xy >= 0.0, float2(-t, -t), float2(t, t));
+    n.x += (n.x >= 0.0) ? -t : t;
+    n.y += (n.y >= 0.0) ? -t : t;
 
     return normalize(n);
 }
