@@ -60,7 +60,7 @@ namespace Renderer
         m_Device = device;
         m_DeletionQueue = deletionQueue;
         m_ColorFormat = desc.ColorFormat;
-        m_DepthFormat = desc.DepthFormat;
+        m_DepthStencilFormat = desc.DepthStencilFormat;
 
         // Generate sphere mesh for point lights
         if (!GenerateSphereMesh(device, desc.SphereSegments))
@@ -375,10 +375,10 @@ namespace Renderer
         // No color output for stencil pass
         desc.ColorBlendAttachments.clear();
 
-        // Render target formats
+        // Render target formats (use combined depth-stencil format for both)
         desc.ColorAttachmentFormats.push_back(m_ColorFormat);
-        desc.DepthAttachmentFormat = m_DepthFormat;
-        desc.StencilAttachmentFormat = VK_FORMAT_S8_UINT;
+        desc.DepthAttachmentFormat = m_DepthStencilFormat;
+        desc.StencilAttachmentFormat = m_DepthStencilFormat;
 
         // Descriptor set layouts
         desc.DescriptorSetLayouts = {gBufferLayout, lightLayout};
@@ -426,16 +426,16 @@ namespace Renderer
         desc.DepthWriteEnable = false;
         desc.DepthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;
 
-        // Stencil: only shade where stencil is non-zero
+        // Stencil: only shade where stencil is non-zero, then clear it
         desc.StencilTestEnable = true;
 
         VkStencilOpState stencilOp{};
         stencilOp.failOp = VK_STENCIL_OP_KEEP;
-        stencilOp.passOp = VK_STENCIL_OP_KEEP;
-        stencilOp.depthFailOp = VK_STENCIL_OP_KEEP;
+        stencilOp.passOp = VK_STENCIL_OP_ZERO;  // Clear stencil after shading
+        stencilOp.depthFailOp = VK_STENCIL_OP_ZERO;  // Also clear on depth fail
         stencilOp.compareOp = VK_COMPARE_OP_NOT_EQUAL;
         stencilOp.compareMask = 0xFF;
-        stencilOp.writeMask = 0x00; // Don't modify stencil
+        stencilOp.writeMask = 0xFF;  // Allow writing to clear stencil
         stencilOp.reference = 0;
 
         desc.StencilFront = stencilOp;
@@ -452,10 +452,10 @@ namespace Renderer
         blendAttachment.AlphaBlendOp = VK_BLEND_OP_ADD;
         desc.ColorBlendAttachments.push_back(blendAttachment);
 
-        // Render target formats
+        // Render target formats (use combined depth-stencil format for both)
         desc.ColorAttachmentFormats.push_back(m_ColorFormat);
-        desc.DepthAttachmentFormat = m_DepthFormat;
-        desc.StencilAttachmentFormat = VK_FORMAT_S8_UINT;
+        desc.DepthAttachmentFormat = m_DepthStencilFormat;
+        desc.StencilAttachmentFormat = m_DepthStencilFormat;
 
         // Descriptor set layouts
         desc.DescriptorSetLayouts = {gBufferLayout, lightLayout};
@@ -503,16 +503,16 @@ namespace Renderer
         desc.DepthWriteEnable = false;
         desc.DepthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;
 
-        // Stencil
+        // Stencil: only shade where stencil is non-zero, then clear it
         desc.StencilTestEnable = true;
 
         VkStencilOpState stencilOp{};
         stencilOp.failOp = VK_STENCIL_OP_KEEP;
-        stencilOp.passOp = VK_STENCIL_OP_KEEP;
-        stencilOp.depthFailOp = VK_STENCIL_OP_KEEP;
+        stencilOp.passOp = VK_STENCIL_OP_ZERO;  // Clear stencil after shading
+        stencilOp.depthFailOp = VK_STENCIL_OP_ZERO;  // Also clear on depth fail
         stencilOp.compareOp = VK_COMPARE_OP_NOT_EQUAL;
         stencilOp.compareMask = 0xFF;
-        stencilOp.writeMask = 0x00;
+        stencilOp.writeMask = 0xFF;  // Allow writing to clear stencil
         stencilOp.reference = 0;
 
         desc.StencilFront = stencilOp;
@@ -529,10 +529,10 @@ namespace Renderer
         blendAttachment.AlphaBlendOp = VK_BLEND_OP_ADD;
         desc.ColorBlendAttachments.push_back(blendAttachment);
 
-        // Render target formats
+        // Render target formats (use combined depth-stencil format for both)
         desc.ColorAttachmentFormats.push_back(m_ColorFormat);
-        desc.DepthAttachmentFormat = m_DepthFormat;
-        desc.StencilAttachmentFormat = VK_FORMAT_S8_UINT;
+        desc.DepthAttachmentFormat = m_DepthStencilFormat;
+        desc.StencilAttachmentFormat = m_DepthStencilFormat;
 
         // Descriptor set layouts
         desc.DescriptorSetLayouts = {gBufferLayout, lightLayout};
@@ -562,8 +562,15 @@ namespace Renderer
         // outerConeAngle is stored as cos(angle), so we need acos to get the angle
         float angle = std::acos(light.OuterConeAngle);
 
-        // Estimate effective range (using a default since SpotLight doesn't have explicit range)
-        const float range = 50.0f;
+        // Estimate effective range from intensity using attenuation threshold
+        // When attenuation falls below threshold, light contribution is negligible
+        // Using inverse-square law: intensity / (distance^2) = threshold
+        // Solving for distance: range = sqrt(intensity / threshold)
+        const float attenuationThreshold = 0.01f;
+        float range = std::sqrt(light.Intensity / attenuationThreshold);
+
+        // Clamp range to reasonable bounds
+        range = std::max(1.0f, std::min(range, 100.0f));
 
         // Cone base radius at the end of range
         float baseRadius = range * std::tan(angle);
@@ -659,8 +666,8 @@ namespace Renderer
                 &pushConstants);
             cmdBuffer->DrawIndexed(m_SphereIndexCount);
 
-            // Clear stencil for next light
-            cmdBuffer->SetStencilReference(VK_STENCIL_FACE_FRONT_AND_BACK, 0);
+            // Note: Stencil is automatically cleared by the lighting pass
+            // (passOp = VK_STENCIL_OP_ZERO) so no explicit clear is needed
         }
     }
 
@@ -722,8 +729,8 @@ namespace Renderer
                 &pushConstants);
             cmdBuffer->DrawIndexed(m_ConeIndexCount);
 
-            // Clear stencil for next light
-            cmdBuffer->SetStencilReference(VK_STENCIL_FACE_FRONT_AND_BACK, 0);
+            // Note: Stencil is automatically cleared by the lighting pass
+            // (passOp = VK_STENCIL_OP_ZERO) so no explicit clear is needed
         }
     }
 

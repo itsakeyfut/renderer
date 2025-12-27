@@ -153,9 +153,13 @@ float4 main(PSInput input) : SV_TARGET
     float distance = length(lightVec);
     float3 L = lightVec / distance;
 
-    // Distance attenuation (using default radius for spot lights)
-    float radius = 50.0;
-    float distanceAttenuation = CalculateAttenuation(distance, radius);
+    // Distance attenuation using computed range from intensity
+    // range = sqrt(intensity / threshold), threshold = 0.01
+    // This matches the cone volume calculation in C++
+    float attenuationThreshold = 0.01;
+    float effectiveRange = sqrt(light.Intensity / attenuationThreshold);
+    effectiveRange = clamp(effectiveRange, 1.0, 100.0);
+    float distanceAttenuation = CalculateAttenuation(distance, effectiveRange);
 
     // Spot cone attenuation
     float spotAttenuation = CalculateSpotAttenuation(

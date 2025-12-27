@@ -57,9 +57,12 @@ namespace Renderer
         VkFormat ColorFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
 
         /**
-         * @brief Depth format from G-Buffer
+         * @brief Combined depth-stencil format for light volume rendering
+         *
+         * Must be a combined depth-stencil format (e.g., D32_SFLOAT_S8_UINT)
+         * since stencil operations are required for the optimization.
          */
-        VkFormat DepthFormat = VK_FORMAT_D32_SFLOAT;
+        VkFormat DepthStencilFormat = VK_FORMAT_D32_SFLOAT_S8_UINT;
 
         /**
          * @brief Debug name for the renderer
@@ -349,7 +352,7 @@ namespace Renderer
 
         // Configuration
         VkFormat m_ColorFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
-        VkFormat m_DepthFormat = VK_FORMAT_D32_SFLOAT;
+        VkFormat m_DepthStencilFormat = VK_FORMAT_D32_SFLOAT_S8_UINT;
         bool m_PipelinesInitialized = false;
     };
 
