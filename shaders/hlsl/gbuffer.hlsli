@@ -47,6 +47,9 @@ float2 OctWrap(float2 v)
  */
 float2 EncodeNormal(float3 n)
 {
+    // Ensure input is normalized to avoid division by zero
+    n = normalize(n);
+
     // Project to octahedron by dividing by L1 norm
     n /= (abs(n.x) + abs(n.y) + abs(n.z));
 
