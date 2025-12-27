@@ -1171,11 +1171,25 @@ int main()
     pipelineDesc.ColorAttachmentFormats.push_back(swapchain->GetImageFormat());
     pipelineDesc.DepthAttachmentFormat = depthBuffer->GetFormat();
 
-    // Descriptor set layouts: Set 0 = scene data, Set 1 = material data, Set 2 = light data, Set 3 = IBL data
+    // CSM descriptor layout (created early for pipeline layout inclusion)
+    // Binding 0: CascadedShadowMapUBO (cascade matrices and split depths)
+    // Binding 1: Shadow map array (Texture2DArray sampler for CSM sampling)
+    auto csmDescriptorLayout = RHI::RHIDescriptorSetLayout::Create(device, {
+        {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT},
+        {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT}
+    });
+    if (!csmDescriptorLayout)
+    {
+        LOG_FATAL("Failed to create CSM descriptor set layout!");
+        return EXIT_FAILURE;
+    }
+
+    // Descriptor set layouts: Set 0 = scene data, Set 1 = material, Set 2 = light, Set 3 = IBL, Set 4 = CSM
     pipelineDesc.DescriptorSetLayouts.push_back(descriptorLayout->GetHandle());
     pipelineDesc.DescriptorSetLayouts.push_back(materialDescriptorLayout->GetHandle());
     pipelineDesc.DescriptorSetLayouts.push_back(lightManager->GetDescriptorSetLayout()->GetHandle());
     pipelineDesc.DescriptorSetLayouts.push_back(iblDescriptorLayout->GetHandle());
+    pipelineDesc.DescriptorSetLayouts.push_back(csmDescriptorLayout->GetHandle());
 
     auto pipeline = RHI::RHIPipeline::CreateGraphics(device, pipelineDesc);
     if (!pipeline)
@@ -1295,18 +1309,7 @@ int main()
     // =========================================================================
     // CSM UBO and Descriptor Sets (for lighting pass)
     // =========================================================================
-    // CSM descriptor layout:
-    //   Binding 0: CascadedShadowMapUBO (uniform buffer with cascade matrices and split depths)
-    //   Binding 1: Shadow map array (Texture2DArray sampler for CSM sampling)
-    auto csmDescriptorLayout = RHI::RHIDescriptorSetLayout::Create(device, {
-        {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT},
-        {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT}
-    });
-    if (!csmDescriptorLayout)
-    {
-        LOG_FATAL("Failed to create CSM descriptor set layout!");
-        return EXIT_FAILURE;
-    }
+    // Note: csmDescriptorLayout is created before pipeline (see pipeline layout setup above)
 
     // CSM UBO buffers (per frame)
     std::array<Core::Ref<RHI::RHIBuffer>, Renderer::MAX_FRAMES_IN_FLIGHT> csmUBOs;
@@ -2129,6 +2132,13 @@ int main()
             pipeline->GetLayout(),
             3,
             {iblDescriptorSets[frameIndex]->GetHandle()});
+
+        // Bind CSM descriptor set (Set 4)
+        cmdBuffer->BindDescriptorSets(
+            VK_PIPELINE_BIND_POINT_GRAPHICS,
+            pipeline->GetLayout(),
+            4,
+            {csmDescriptorSets[frameIndex]->GetHandle()});
 
         cmdBuffer->BindVertexBuffer(vertexBuffer->GetHandle());
         cmdBuffer->BindIndexBuffer(indexBuffer->GetHandle(), VK_INDEX_TYPE_UINT32);
