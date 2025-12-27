@@ -92,7 +92,7 @@ float3 DecodeNormal(float2 encoded)
 // G-Buffer Structure
 // ============================================================================
 // Defines the G-Buffer render target layout:
-//   RT0 (Albedo):   R8G8B8A8_SRGB    - RGB = Base color, A = unused
+//   RT0 (Albedo):   R8G8B8A8_SRGB    - RGB = Base color, A = alpha (for alpha testing)
 //   RT1 (Normal):   R16G16_SFLOAT   - RG = Octahedral encoded normal
 //   RT2 (Material): R8G8B8A8_UNORM  - R = Metallic, G = Roughness, B = AO, A = unused
 //   RT3 (Emissive): R16G16B16A16_SFLOAT - RGB = Emissive, A = unused
