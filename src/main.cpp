@@ -29,7 +29,7 @@
 #include "Renderer/DepthBuffer.h"
 #include "Renderer/FrameManager.h"
 #include "Renderer/LightManager.h"
-#include "Renderer/ShadowMap.h"
+#include "Renderer/CascadedShadowMap.h"
 #include "Renderer/SkyboxRenderer.h"
 #include "Renderer/Debug/ImGuiRenderer.h"
 #include "Resources/ModelLoader.h"
@@ -696,23 +696,22 @@ int main()
     LOG_INFO("Light manager created with {} point lights", lightManager->GetPointLightCount());
 
     // =========================================================================
-    // Shadow Map
+    // Cascaded Shadow Map (CSM)
     // =========================================================================
-    Renderer::ShadowMapDesc shadowMapDesc;
-    shadowMapDesc.Resolution = 2048;
-    shadowMapDesc.Format = VK_FORMAT_D32_SFLOAT;
-    shadowMapDesc.DebugName = "Directional Light Shadow Map";
+    Renderer::CascadedShadowMapDesc csmDesc;
+    csmDesc.Resolution = 2048;
+    csmDesc.Format = VK_FORMAT_D32_SFLOAT;
+    csmDesc.SplitLambda = 0.5f;
+    csmDesc.DebugName = "Cascaded Shadow Map";
 
-    auto shadowMap = Renderer::ShadowMap::Create(device, deletionQueue, shadowMapDesc);
-    if (!shadowMap)
+    auto cascadedShadowMap = Renderer::CascadedShadowMap::Create(device, deletionQueue, csmDesc);
+    if (!cascadedShadowMap)
     {
-        LOG_FATAL("Failed to create shadow map!");
+        LOG_FATAL("Failed to create cascaded shadow map!");
         return EXIT_FAILURE;
     }
-    LOG_INFO("Shadow map created: {}x{}", shadowMapDesc.Resolution, shadowMapDesc.Resolution);
-
-    // Set shadow map on light manager
-    lightManager->SetShadowMap(shadowMap);
+    LOG_INFO("Cascaded shadow map created: {}x{} x {} cascades",
+             csmDesc.Resolution, csmDesc.Resolution, Renderer::CASCADE_COUNT);
 
     // =========================================================================
     // IBL Descriptor Set Layout (Set 3)
@@ -1172,11 +1171,25 @@ int main()
     pipelineDesc.ColorAttachmentFormats.push_back(swapchain->GetImageFormat());
     pipelineDesc.DepthAttachmentFormat = depthBuffer->GetFormat();
 
-    // Descriptor set layouts: Set 0 = scene data, Set 1 = material data, Set 2 = light data, Set 3 = IBL data
+    // CSM descriptor layout (created early for pipeline layout inclusion)
+    // Binding 0: CascadedShadowMapUBO (cascade matrices and split depths)
+    // Binding 1: Shadow map array (Texture2DArray sampler for CSM sampling)
+    auto csmDescriptorLayout = RHI::RHIDescriptorSetLayout::Create(device, {
+        {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT},
+        {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT}
+    });
+    if (!csmDescriptorLayout)
+    {
+        LOG_FATAL("Failed to create CSM descriptor set layout!");
+        return EXIT_FAILURE;
+    }
+
+    // Descriptor set layouts: Set 0 = scene data, Set 1 = material, Set 2 = light, Set 3 = IBL, Set 4 = CSM
     pipelineDesc.DescriptorSetLayouts.push_back(descriptorLayout->GetHandle());
     pipelineDesc.DescriptorSetLayouts.push_back(materialDescriptorLayout->GetHandle());
     pipelineDesc.DescriptorSetLayouts.push_back(lightManager->GetDescriptorSetLayout()->GetHandle());
     pipelineDesc.DescriptorSetLayouts.push_back(iblDescriptorLayout->GetHandle());
+    pipelineDesc.DescriptorSetLayouts.push_back(csmDescriptorLayout->GetHandle());
 
     auto pipeline = RHI::RHIPipeline::CreateGraphics(device, pipelineDesc);
     if (!pipeline)
@@ -1244,7 +1257,7 @@ int main()
     // No color attachments - depth only
     shadowPipelineDesc.ColorBlendAttachments.clear();
     shadowPipelineDesc.ColorAttachmentFormats.clear();
-    shadowPipelineDesc.DepthAttachmentFormat = shadowMap->GetFormat();
+    shadowPipelineDesc.DepthAttachmentFormat = cascadedShadowMap->GetFormat();
 
     shadowPipelineDesc.DescriptorSetLayouts.push_back(shadowDescriptorLayout->GetHandle());
 
@@ -1292,6 +1305,63 @@ int main()
         shadowDescriptorSets[i]->UpdateBuffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, shadowConstantsUBOs[i]);
     }
     LOG_INFO("Shadow descriptor sets created");
+
+    // =========================================================================
+    // CSM UBO and Descriptor Sets (for lighting pass)
+    // =========================================================================
+    // Note: csmDescriptorLayout is created before pipeline (see pipeline layout setup above)
+
+    // CSM UBO buffers (per frame)
+    std::array<Core::Ref<RHI::RHIBuffer>, Renderer::MAX_FRAMES_IN_FLIGHT> csmUBOs;
+    for (size_t i = 0; i < Renderer::MAX_FRAMES_IN_FLIGHT; ++i)
+    {
+        RHI::BufferDesc uboDesc;
+        uboDesc.Size = sizeof(Renderer::CascadedShadowMapUBO);
+        uboDesc.Usage = RHI::BufferUsage::Uniform;
+        uboDesc.Memory = RHI::MemoryUsage::CpuToGpu;
+        uboDesc.DebugName = "CSM UBO";
+
+        csmUBOs[i] = RHI::RHIBuffer::Create(device, uboDesc);
+        if (!csmUBOs[i])
+        {
+            LOG_FATAL("Failed to create CSM UBO!");
+            return EXIT_FAILURE;
+        }
+    }
+
+    // CSM descriptor pool and sets
+    auto csmDescriptorPool = RHI::RHIDescriptorPool::Create(
+        device,
+        Renderer::MAX_FRAMES_IN_FLIGHT,
+        {
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, Renderer::MAX_FRAMES_IN_FLIGHT},
+            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, Renderer::MAX_FRAMES_IN_FLIGHT}
+        });
+
+    if (!csmDescriptorPool)
+    {
+        LOG_FATAL("Failed to create CSM descriptor pool!");
+        return EXIT_FAILURE;
+    }
+
+    std::array<Core::Ref<RHI::RHIDescriptorSet>, Renderer::MAX_FRAMES_IN_FLIGHT> csmDescriptorSets;
+    for (size_t i = 0; i < Renderer::MAX_FRAMES_IN_FLIGHT; ++i)
+    {
+        csmDescriptorSets[i] = RHI::RHIDescriptorSet::Create(device, csmDescriptorPool, csmDescriptorLayout);
+        if (!csmDescriptorSets[i])
+        {
+            LOG_FATAL("Failed to create CSM descriptor set!");
+            return EXIT_FAILURE;
+        }
+        // Bind CSM UBO (binding 0)
+        csmDescriptorSets[i]->UpdateBuffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, csmUBOs[i]);
+        // Bind CSM texture array (binding 1)
+        csmDescriptorSets[i]->UpdateImage(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            cascadedShadowMap->GetImageView(),
+            cascadedShadowMap->GetSampler()->GetHandle(),
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    }
+    LOG_INFO("CSM descriptor sets created");
 
     // =========================================================================
     // ImGui Renderer
@@ -1523,50 +1593,19 @@ int main()
         objectData.NormalMatrix = glm::transpose(glm::inverse(objectData.Model));
         objectUBOs[frameIndex]->SetData(&objectData, sizeof(objectData));
 
-        // Calculate light-space matrix for directional shadow
-        // Use a simple orthographic frustum centered around the scene
+        // Update Cascaded Shadow Map
+        // CSM automatically calculates cascade split depths and light-space matrices
         {
-            const auto& bounds = loadedModel->GetBounds();
-            float centerArr[3], extentArr[3];
-            bounds.GetCenter(centerArr);
-            bounds.GetExtents(extentArr);
-            glm::vec3 sceneCenter(centerArr[0], centerArr[1], centerArr[2]);
-            glm::vec3 sceneExtent(extentArr[0], extentArr[1], extentArr[2]);
-            float maxExtent = glm::max(sceneExtent.x, glm::max(sceneExtent.y, sceneExtent.z));
-
             // Get directional light direction
             Scene::DirectionalLight dirLight = lightManager->GetDirectionalLight();
             glm::vec3 lightDir = glm::normalize(dirLight.Direction);
 
-            // Calculate light position far enough to cover the scene
-            float shadowDistance = maxExtent * 5.0f;
-            glm::vec3 lightPos = sceneCenter - lightDir * shadowDistance;
+            // Update CSM cascade matrices based on camera frustum and light direction
+            cascadedShadowMap->Update(camera, lightDir);
 
-            // Light view matrix (looking at scene center from light position)
-            glm::mat4 lightView = glm::lookAt(lightPos, sceneCenter, glm::vec3(0.0f, 1.0f, 0.0f));
-
-            // Orthographic projection to cover the scene
-            float orthoSize = maxExtent * 2.5f;
-            glm::mat4 lightProj = glm::ortho(
-                -orthoSize, orthoSize,
-                -orthoSize, orthoSize,
-                0.1f, shadowDistance * 2.0f);
-
-            // Vulkan clip space correction (Y is flipped, depth is [0,1])
-            lightProj[1][1] *= -1.0f;
-
-            // Update shadow map matrices
-            shadowMap->SetLightMatrices(lightView, lightProj);
-
-            // Update shadow constants UBO for shadow pass
-            struct ShadowConstants {
-                glm::mat4 lightSpaceMatrix;
-                glm::mat4 model;
-            };
-            ShadowConstants shadowConsts;
-            shadowConsts.lightSpaceMatrix = shadowMap->GetLightSpaceMatrix();
-            shadowConsts.model = glm::mat4(1.0f); // Identity model matrix
-            shadowConstantsUBOs[frameIndex]->SetData(&shadowConsts, sizeof(shadowConsts));
+            // Update CSM UBO for lighting pass (contains all cascade data)
+            Renderer::CascadedShadowMapUBO csmData = cascadedShadowMap->GetUBOData();
+            csmUBOs[frameIndex]->SetData(&csmData, sizeof(csmData));
         }
 
         // Update light GPU buffers (includes shadow UBO)
@@ -1694,7 +1733,10 @@ int main()
             // Shadow Settings
             if (ImGui::CollapsingHeader("Shadow Settings", ImGuiTreeNodeFlags_DefaultOpen))
             {
-                ImGui::Text("Shadow Map: %dx%d", shadowMap->GetResolution(), shadowMap->GetResolution());
+                ImGui::Text("CSM: %dx%d x %d cascades",
+                    cascadedShadowMap->GetResolution(),
+                    cascadedShadowMap->GetResolution(),
+                    Renderer::CASCADE_COUNT);
 
                 float shadowBias = lightManager->GetShadowBias();
                 if (ImGui::SliderFloat("Shadow Bias", &shadowBias, 0.0f, 0.05f, "%.4f"))
@@ -1967,34 +2009,53 @@ int main()
         VkImage colorImage = swapchain->GetImage(imageIndex);
 
         // =====================================================================
-        // Shadow Pass - Render scene from light's perspective
+        // Shadow Pass - Render scene from light's perspective (4 cascades)
         // =====================================================================
         {
-            // Begin shadow map rendering (handles layout transitions internally)
-            shadowMap->Begin(cmdBuffer);
+            // Structure for shadow vertex shader constants
+            struct ShadowConstants {
+                glm::mat4 lightSpaceMatrix;
+                glm::mat4 model;
+            };
 
-            // Bind shadow pipeline
-            cmdBuffer->BindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, shadowPipeline->GetHandle());
-
-            // Bind shadow descriptor set (contains light-space matrix and model)
-            cmdBuffer->BindDescriptorSets(
-                VK_PIPELINE_BIND_POINT_GRAPHICS,
-                shadowPipeline->GetLayout(),
-                0,
-                {shadowDescriptorSets[frameIndex]->GetHandle()});
-
-            // Bind vertex and index buffers
-            cmdBuffer->BindVertexBuffer(vertexBuffer->GetHandle());
-            cmdBuffer->BindIndexBuffer(indexBuffer->GetHandle(), VK_INDEX_TYPE_UINT32);
-
-            // Draw all meshes (depth only, no material binding needed)
-            for (const auto& drawInfo : meshDrawInfos)
+            // Render each cascade
+            for (uint32_t cascadeIndex = 0; cascadeIndex < Renderer::CASCADE_COUNT; ++cascadeIndex)
             {
-                cmdBuffer->DrawIndexed(drawInfo.IndexCount, 1, drawInfo.IndexOffset, 0, 0);
+                // Begin rendering to this cascade (handles layout transitions)
+                cascadedShadowMap->BeginCascade(cmdBuffer, cascadeIndex);
+
+                // Update shadow constants with this cascade's light-space matrix
+                ShadowConstants shadowConsts;
+                shadowConsts.lightSpaceMatrix = cascadedShadowMap->GetLightSpaceMatrix(cascadeIndex);
+                shadowConsts.model = glm::mat4(1.0f);
+                shadowConstantsUBOs[frameIndex]->SetData(&shadowConsts, sizeof(shadowConsts));
+
+                // Bind shadow pipeline
+                cmdBuffer->BindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, shadowPipeline->GetHandle());
+
+                // Bind shadow descriptor set (contains light-space matrix and model)
+                cmdBuffer->BindDescriptorSets(
+                    VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    shadowPipeline->GetLayout(),
+                    0,
+                    {shadowDescriptorSets[frameIndex]->GetHandle()});
+
+                // Bind vertex and index buffers
+                cmdBuffer->BindVertexBuffer(vertexBuffer->GetHandle());
+                cmdBuffer->BindIndexBuffer(indexBuffer->GetHandle(), VK_INDEX_TYPE_UINT32);
+
+                // Draw all meshes (depth only, no material binding needed)
+                for (const auto& drawInfo : meshDrawInfos)
+                {
+                    cmdBuffer->DrawIndexed(drawInfo.IndexCount, 1, drawInfo.IndexOffset, 0, 0);
+                }
+
+                // End this cascade
+                cascadedShadowMap->EndCascade(cmdBuffer, cascadeIndex);
             }
 
-            // End shadow pass (transitions to shader read layout)
-            shadowMap->End(cmdBuffer);
+            // Transition all cascades to shader read layout for lighting pass
+            cascadedShadowMap->TransitionToShaderRead(cmdBuffer);
         }
 
         // =====================================================================
@@ -2071,6 +2132,13 @@ int main()
             pipeline->GetLayout(),
             3,
             {iblDescriptorSets[frameIndex]->GetHandle()});
+
+        // Bind CSM descriptor set (Set 4)
+        cmdBuffer->BindDescriptorSets(
+            VK_PIPELINE_BIND_POINT_GRAPHICS,
+            pipeline->GetLayout(),
+            4,
+            {csmDescriptorSets[frameIndex]->GetHandle()});
 
         cmdBuffer->BindVertexBuffer(vertexBuffer->GetHandle());
         cmdBuffer->BindIndexBuffer(indexBuffer->GetHandle(), VK_INDEX_TYPE_UINT32);
@@ -2195,7 +2263,13 @@ int main()
     shadowDescriptorPool.reset();
     shadowDescriptorLayout.reset();
     for (auto& ubo : shadowConstantsUBOs) ubo.reset();
-    shadowMap.reset();
+
+    // CSM system cleanup
+    for (auto& ds : csmDescriptorSets) ds.reset();
+    csmDescriptorPool.reset();
+    csmDescriptorLayout.reset();
+    for (auto& ubo : csmUBOs) ubo.reset();
+    cascadedShadowMap.reset();
 
     for (auto& ds : descriptorSets) ds.reset();
     descriptorPool.reset();
